@@ -47,6 +47,7 @@
 				BasicRuntimeChecks="3"
 				RuntimeLibrary="3"
 				EnableFunctionLevelLinking="true"
+				UsePrecompiledHeader="1"
 				WarningLevel="4"
 				WarnAsError="true"
 				Detect64BitPortabilityProblems="true"
@@ -346,7 +347,19 @@
 			UniqueIdentifier="{4FC737F1-C7A5-4376-A066-2A32D752A2FF}"
 			>
 			<File
+				RelativePath=".\Adapter.cpp"
+				>
+			</File>
+			<File
 				RelativePath=".\LUTloader.cpp"
+				>
+			</File>
+			<File
+				RelativePath=".\Monitor.cpp"
+				>
+			</File>
+			<File
+				RelativePath=".\stdafx.cpp"
 				>
 			</File>
 		</Filter>
@@ -356,7 +369,19 @@
 			UniqueIdentifier="{93995380-89BD-4b04-88EB-625FBE52EBFB}"
 			>
 			<File
+				RelativePath=".\Adapter.h"
+				>
+			</File>
+			<File
+				RelativePath=".\Monitor.h"
+				>
+			</File>
+			<File
 				RelativePath=".\resource.h"
+				>
+			</File>
+			<File
+				RelativePath=".\stdafx.h"
 				>
 			</File>
 		</Filter>
