@@ -78,14 +78,103 @@ int LoadLUTs(void) {
 	return 0;
 }
 
+	static WNDPROC oldPropSheetWindowProc = 0;
+	static WINDOWINFO baseWindowInfo;
+	static HWND parentWindow;
+	static SIZE previousParentWindowSize;
+	static RECT previousCancelButtonRect;
+	static SIZE previousCancelButtonSize;
+	static POINT propertySheetClientAreaOffset;
+
+// Subclass procedure for the main PropertySheet
+//
+INT_PTR CALLBACK PropSheetSubclassProc(HWND hWnd, UINT uMessage, WPARAM wParam, LPARAM lParam) {
+
+	switch (uMessage) {
+
+		// Notice changes in window size
+		//
+		case WM_WINDOWPOSCHANGED:
+			WINDOWPOS * pWindowPos;
+			pWindowPos = reinterpret_cast<WINDOWPOS *>(lParam);
+
+			if ( 0 == (pWindowPos->flags & SWP_NOSIZE) && 0 != parentWindow ) {
+
+				// Main window has resized, move or resize all controls
+				//
+				HWND dlgid;
+				dlgid = GetDlgItem(hWnd, IDCANCEL);
+
+				// Compute the PropertySheet's size delta, which we can then just add to our 'previous' Cancel button rect
+				//
+				SIZE parentSizeDelta;
+				parentSizeDelta.cx = pWindowPos->cx - previousParentWindowSize.cx;
+				parentSizeDelta.cy = pWindowPos->cy - previousParentWindowSize.cy;
+
+				// Move the Cancel button
+				//
+				MoveWindow(
+						dlgid,
+						previousCancelButtonRect.left + parentSizeDelta.cx,
+						previousCancelButtonRect.top + parentSizeDelta.cy,
+						previousCancelButtonSize.cx,
+						previousCancelButtonSize.cy,
+						FALSE
+				);
+
+				// We can fix up redrawing better, I think ...
+				//
+				InvalidateRect(dlgid, NULL, TRUE);
+				//RECT fixupRect;
+				//fixupRect.left = previousCancelButtonRect.left - pWindowPos->x - propertySheetClientAreaOffset.x;
+				//fixupRect.top = previousCancelButtonRect.top - pWindowPos->y - propertySheetClientAreaOffset.y;
+				//fixupRect.right = previousCancelButtonRect.right - pWindowPos->x - propertySheetClientAreaOffset.x;
+				//fixupRect.bottom = previousCancelButtonRect.bottom - pWindowPos->y - propertySheetClientAreaOffset.y;
+				//InvalidateRect(hWnd, &fixupRect, TRUE);
+				InvalidateRect(hWnd, NULL, TRUE);
+
+				previousParentWindowSize.cx = pWindowPos->cx;
+				previousParentWindowSize.cy = pWindowPos->cy;
+
+				previousCancelButtonRect.left += parentSizeDelta.cx;
+				previousCancelButtonRect.top += parentSizeDelta.cy;
+				previousCancelButtonRect.right += parentSizeDelta.cx;
+				previousCancelButtonRect.bottom += parentSizeDelta.cy;
+			}
+			return CallWindowProc(oldPropSheetWindowProc, hWnd, uMessage, wParam, lParam);
+			break;
+
+		default:
+			break;
+	}
+	return CallWindowProc(oldPropSheetWindowProc, hWnd, uMessage, wParam, lParam);
+}
+
 // PropertySheet callback routine
 //
 int CALLBACK PropSheetCallback(HWND hWnd, UINT uMsg, LPARAM lParam) {
 
 	UNREFERENCED_PARAMETER(hWnd);
-	UNREFERENCED_PARAMETER(uMsg);
-	UNREFERENCED_PARAMETER(lParam);
 
+	switch(uMsg) {
+
+		case PSCB_PRECREATE:
+
+			// Change the PropertySheet's window styles
+			//
+			LPDLGTEMPLATE lpTemplate;
+			lpTemplate = reinterpret_cast<LPDLGTEMPLATE>(lParam);
+			lpTemplate->style |= (WS_THICKFRAME | WS_MINIMIZEBOX | WS_MAXIMIZEBOX);
+			break;
+
+		case PSCB_INITIALIZED:
+
+			// Subclass the property sheet
+			//
+			oldPropSheetWindowProc = (WNDPROC)(INT_PTR)SetWindowLongPtr(hWnd, GWLP_WNDPROC, (__int3264)(LONG_PTR)PropSheetSubclassProc);
+			break;
+
+	}
 	return 0;
 }
 
@@ -139,6 +228,29 @@ INT_PTR CALLBACK SummaryPageProc(HWND hWnd, UINT uMessage, WPARAM wParam, LPARAM
 			//
 			oldWindowProc = (WNDPROC)(INT_PTR)SetWindowLongPtr(GetDlgItem(hWnd, IDC_SUMMARY_TEXT), GWLP_WNDPROC, (__int3264)(LONG_PTR)EditSubclassProc);
 
+			// Collect base information for dialog resizing
+			//
+			parentWindow = GetParent(hWnd);
+			SecureZeroMemory(&baseWindowInfo, sizeof(baseWindowInfo));
+			baseWindowInfo.cbSize = sizeof(baseWindowInfo);
+			GetWindowInfo(parentWindow, &baseWindowInfo);
+
+			previousParentWindowSize.cx = baseWindowInfo.rcWindow.right - baseWindowInfo.rcWindow.left;
+			previousParentWindowSize.cy = baseWindowInfo.rcWindow.bottom - baseWindowInfo.rcWindow.top;
+
+			propertySheetClientAreaOffset.x = baseWindowInfo.rcClient.left - baseWindowInfo.rcWindow.left;
+			propertySheetClientAreaOffset.y = baseWindowInfo.rcClient.top - baseWindowInfo.rcWindow.top;
+
+			GetWindowRect(GetDlgItem(parentWindow, IDCANCEL), &previousCancelButtonRect);
+
+			previousCancelButtonSize.cx = previousCancelButtonRect.right - previousCancelButtonRect.left;
+			previousCancelButtonSize.cy = previousCancelButtonRect.bottom - previousCancelButtonRect.top;
+
+			previousCancelButtonRect.left -= baseWindowInfo.rcClient.left;
+			previousCancelButtonRect.top -= baseWindowInfo.rcClient.top;
+			previousCancelButtonRect.right -= baseWindowInfo.rcClient.left;
+			previousCancelButtonRect.bottom -= baseWindowInfo.rcClient.top;
+
 			// Build a display string describing the monitors we found
 			//
 			wstring summaryString;
@@ -166,6 +278,26 @@ INT_PTR CALLBACK SummaryPageProc(HWND hWnd, UINT uMessage, WPARAM wParam, LPARAM
 		case WM_CTLCOLORSTATIC:
 			return reinterpret_cast<INT_PTR>(GetStockObject(WHITE_BRUSH));
 			break;
+
+		//case WM_NOTIFY:
+		//	NMHDR * lpnmhdr;
+		//	lpnmhdr = reinterpret_cast<NMHDR *>(lParam);
+		//	switch (lpnmhdr->code) {
+		//		case PSN_APPLY:   //sent when OK or Apply button pressed
+		//			break;
+
+		//		case PSN_RESET:   //sent when Cancel button pressed
+		//			break;
+
+		//		case PSN_SETACTIVE:
+		//			//this will be ignored if the property sheet is not a wizard
+		//			//PropSheet_SetWizButtons(GetParent(hdlg), PSWIZB_NEXT);
+		//			break;
+
+		//		default:
+		//			break;
+		//	}
+		//	break;
 	}
 	return 0;
 }
@@ -182,6 +314,15 @@ INT_PTR CALLBACK MonitorPageProc(HWND hWnd, UINT uMessage, WPARAM wParam, LPARAM
 			// Subclass the edit control
 			//
 			oldWindowProc = (WNDPROC)(INT_PTR)SetWindowLongPtr(GetDlgItem(hWnd, IDC_MONITOR_TEXT), GWLP_WNDPROC, (__int3264)(LONG_PTR)EditSubclassProc);
+
+			//wchar_t cString[1024];
+			//GetWindowText(hWnd, cString, _countof(cString));
+			//GetWindowText(GetParent(hWnd), cString, _countof(cString));
+
+			//WINDOWINFO wi;
+			//SecureZeroMemory(&wi, sizeof(wi));
+			//wi.cbSize = sizeof(wi);
+			//GetWindowInfo(GetParent(hWnd), &wi);
 
 			// Build a display string describing this monitor and its profile
 			//
@@ -244,7 +385,9 @@ int ShowLUTLoaderDialog(void) {
 
 		// Set up a page for each monitor
 		//
-		for (size_t i = 0; i < Monitor::GetMonitorListSize(); i++) {
+		size_t listSize = Monitor::GetMonitorListSize();
+		for (size_t i = 0; i < listSize; i++) {
+		//for (size_t i = 0; i < Monitor::GetMonitorListSize(); i++) {
 			pages[i+1].dwSize = sizeof(pages[0]);
 			pages[i+1].hInstance = g_hInst;
 			pages[i+1].pszTemplate = MAKEINTRESOURCE(IDD_MONITOR_PAGE);
@@ -263,11 +406,12 @@ int ShowLUTLoaderDialog(void) {
 			PSH_PROPSHEETPAGE	|
 			PSH_NOAPPLYNOW		|
 			PSH_NOCONTEXTHELP	|
+			PSH_USEICONID		|
 			PSH_USECALLBACK
 			;
 		psh.hwndParent = NULL;
 		psh.hInstance = g_hInst;
-		psh.hIcon = NULL;
+		psh.pszIcon = MAKEINTRESOURCE(IDI_BACKCOLOR);
 		wchar_t szCaption[256];
 		LoadString(g_hInst, IDS_CAPTION, szCaption, _countof(szCaption));
 		psh.pszCaption = szCaption;

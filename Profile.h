@@ -38,12 +38,7 @@ private:
 	int					vcgtIndex;						// Location of VCGT tag in TagTable, or -1
 	VCGT_HEADER *		pVCGT;							// Video Card Gamma Tag
 	int					wcsProfileIndex;				// Location of WCS tag in TagTable, or -1
-
 	wstring				WCS_ColorDeviceModel;			// XML copied from WCS profile
 	wstring				WCS_ColorAppearanceModel;
 	wstring				WCS_GamutMapModel;
-
-	//wchar_t *			WCS_ColorDeviceModel;			// XML copied from WCS profile
-	//wchar_t *			WCS_ColorAppearanceModel;
-	//wchar_t *			WCS_GamutMapModel;
 };

@@ -141,9 +141,6 @@ wstring Profile::GetName(void) const {
 //
 wstring Profile::Load(void) {
 
-#pragma warning(push)
-#pragma warning(disable:6011)	// warning C6011: Dereferencing NULL pointer 'TagTable': Lines: 78, 82, 86, ..., 173, 174, 175
-
 	wstring s;
 
 	// Quit early if no profile
@@ -182,12 +179,12 @@ wstring Profile::Load(void) {
 						TagCount = swap32(TagCount);
 						TagTable = new TAG_TABLE_ENTRY[TagCount];
 
-#pragma warning(push)
-#pragma warning(disable:6029)	// warning C6029: Possible buffer overrun in call to 'ReadFile': use of unchecked value 'this'
-
-						bRet = ReadFile(hFile, TagTable, TagCount * sizeof(TAG_TABLE_ENTRY), &cb, NULL);
-#pragma warning(pop)
-
+						// This useless variable 'dw' is here to work around a "/analyze" bug that produced this warning:
+						// "warning C6029: Possible buffer overrun in call to 'ReadFile': use of unchecked value 'this'"
+						// The alternative is "#pragma warning(disable:6029)" which also suppresses the bogus warning
+						//
+						DWORD dw = TagCount * sizeof(TAG_TABLE_ENTRY);
+						bRet = ReadFile(hFile, TagTable, dw, &cb, NULL);
 						if (bRet) {
 							for (size_t i = 0; i < TagCount; i++) {
 								TagTable[i].Offset = swap32(TagTable[i].Offset);
@@ -240,7 +237,13 @@ wstring Profile::Load(void) {
 								bRet = SetFilePointerEx(hFile, moveTo, NULL, FILE_BEGIN);
 								if (bRet) {
 									BYTE * bigBuffer = new BYTE[TagTable[wcsProfileIndex].Size];
+
+#pragma warning(push)
+#pragma warning(disable:6011)	// warning C6011: Dereferencing NULL pointer 'TagTable': Lines: 78, 82, 86, ..., 173, 174, 175
+
 									bRet = ReadFile(hFile, bigBuffer, TagTable[wcsProfileIndex].Size, &cb, NULL);
+#pragma warning(pop)
+
 									if (bRet) {
 										WCS_IN_ICC_HEADER * wiPtr = reinterpret_cast<WCS_IN_ICC_HEADER *>(bigBuffer);
 										DWORD siz;
@@ -304,7 +307,6 @@ wstring Profile::Load(void) {
 	}
 	ErrorString = s;
 	return s;
-#pragma warning(pop)
 }
 
 // Return a profile filename (no path) from the registry
