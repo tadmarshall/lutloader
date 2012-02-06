@@ -6,12 +6,18 @@
 
 // Constructor
 //
-Adapter::Adapter(const DISPLAY_DEVICEW * displayAdapter) :
-		DeviceName(displayAdapter->DeviceName),
-		DeviceString(displayAdapter->DeviceString),
-		StateFlags(displayAdapter->StateFlags),
-		DeviceID(displayAdapter->DeviceID),
-		DeviceKey(displayAdapter->DeviceKey)
+Adapter::Adapter(const DISPLAY_DEVICEW & displayAdapter) :
+		DeviceName(displayAdapter.DeviceName),
+		DeviceString(displayAdapter.DeviceString),
+		StateFlags(displayAdapter.StateFlags),
+		DeviceID(displayAdapter.DeviceID),
+		DeviceKey(displayAdapter.DeviceKey)
+
+		//DeviceName(displayAdapter->DeviceName),
+		//DeviceString(displayAdapter->DeviceString),
+		//StateFlags(displayAdapter->StateFlags),
+		//DeviceID(displayAdapter->DeviceID),
+		//DeviceKey(displayAdapter->DeviceKey)
 {
 }
 

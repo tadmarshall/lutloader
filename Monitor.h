@@ -8,12 +8,12 @@
 class Monitor {
 
 public:
-	Monitor(int adapterNumber, const DISPLAY_DEVICEW * displayMonitor);
+	Monitor(int adapterNumber, const DISPLAY_DEVICEW & displayMonitor);
 	Monitor(const Monitor & from);
 	wstring SummaryString(void) const;
 	wstring DetailsString(void) const;
 
-	static bool IsMonitorActive(const DISPLAY_DEVICEW * displayMonitor);
+	static bool IsMonitorActive(const DISPLAY_DEVICEW & displayMonitor);
 	static void ClearMonitorList(bool freeAllMemory);
 	static void AddMonitor(const Monitor & monitor);
 	static size_t GetMonitorListSize(void);

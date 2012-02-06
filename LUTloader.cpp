@@ -42,7 +42,7 @@ void FetchMonitorInfo(void) {
 	int iAdapterNum = 0;
 	while ( EnumDisplayDevices(NULL, iAdapterNum, &displayAdapter, 0) ) {
 		if ( Adapter::IsAdapterActive(&displayAdapter) ) {
-			Adapter * adapter = new Adapter(&displayAdapter);
+			Adapter * adapter = new Adapter(displayAdapter);
 			Adapter::AddAdapter(*adapter);
 			delete adapter;
 
@@ -53,8 +53,8 @@ void FetchMonitorInfo(void) {
 			displayMonitor.cb = sizeof(displayMonitor);
 			int iMonitorNum = 0;
 			while ( EnumDisplayDevices(displayAdapter.DeviceName, iMonitorNum, &displayMonitor, 0) ) {
-				if ( Monitor::IsMonitorActive(&displayMonitor) ) {
-					Monitor * monitor = new Monitor(iAdapterNum, &displayMonitor);
+				if ( Monitor::IsMonitorActive(displayMonitor) ) {
+					Monitor * monitor = new Monitor(iAdapterNum, displayMonitor);
 					Monitor::AddMonitor(*monitor);
 					delete monitor;
 				}
@@ -341,7 +341,12 @@ INT_PTR CALLBACK MonitorPageProc(HWND hWnd, UINT uMessage, WPARAM wParam, LPARAM
 			anchorPreset.hwnd = editControlHwnd;
 			Resize::AddAchorPreset(anchorPreset);
 
-			// Fix up the size of the edit control in case the Summary tab was resized
+			HWND treeControlHwnd = GetDlgItem(hWnd, IDC_TREE1);
+			anchorPreset.hwnd = treeControlHwnd;
+			anchorPreset.anchorRight = false;
+			Resize::AddAchorPreset(anchorPreset);
+
+			// Fix up the size of the controls in case the Summary tab was resized
 			// before this tab was created.
 			//
 			RECT originalSize;
@@ -351,21 +356,27 @@ INT_PTR CALLBACK MonitorPageProc(HWND hWnd, UINT uMessage, WPARAM wParam, LPARAM
 			SIZE sizeDelta;
 			sizeDelta.cx = newSize.right - originalSize.right;
 			sizeDelta.cy = newSize.bottom - originalSize.bottom;
-			RECT editSize;
-			GetWindowRect(editControlHwnd, &editSize);
 			WINDOWINFO wiParent;
 			SecureZeroMemory(&wiParent, sizeof(wiParent));
 			wiParent.cbSize = sizeof(wiParent);
 			GetWindowInfo(hWnd, &wiParent);
-			editSize.left -= wiParent.rcClient.left;
-			editSize.top -= wiParent.rcClient.top;
-			editSize.right -= wiParent.rcClient.left;
-			editSize.bottom -= wiParent.rcClient.top;
-			//ScreenToClient(editControlHwnd, reinterpret_cast<POINT *>(&editSize.left));
-			//ScreenToClient(editControlHwnd, reinterpret_cast<POINT *>(&editSize.right));
-			editSize.right += sizeDelta.cx;
-			editSize.bottom += sizeDelta.cy;
-			MoveWindow(editControlHwnd, editSize.left, editSize.top, editSize.right, editSize.bottom, FALSE);
+			RECT rect;
+			GetWindowRect(editControlHwnd, &rect);
+			rect.left -= wiParent.rcClient.left;
+			rect.top -= wiParent.rcClient.top;
+			rect.right -= wiParent.rcClient.left;
+			rect.bottom -= wiParent.rcClient.top;
+			rect.right += sizeDelta.cx;
+			rect.bottom += sizeDelta.cy;
+			MoveWindow(editControlHwnd, rect.left, rect.top, rect.right - rect.left, rect.bottom - rect.top, FALSE);
+			GetWindowRect(treeControlHwnd, &rect);
+			rect.left -= wiParent.rcClient.left;
+			rect.top -= wiParent.rcClient.top;
+			rect.right -= wiParent.rcClient.left;
+			rect.bottom -= wiParent.rcClient.top;
+			//rect.right += sizeDelta.cx;
+			rect.bottom += sizeDelta.cy;
+			MoveWindow(treeControlHwnd, rect.left, rect.top, rect.right - rect.left, rect.bottom - rect.top, FALSE);
 
 			// Tell the resizing system that its window list is out of date
 			//
@@ -381,6 +392,32 @@ INT_PTR CALLBACK MonitorPageProc(HWND hWnd, UINT uMessage, WPARAM wParam, LPARAM
 			DWORD tabSpacing = 8;
 			SendDlgItemMessage(hWnd, IDC_MONITOR_TEXT, EM_SETTABSTOPS, 1, (LPARAM)&tabSpacing);
 			SetDlgItemText(hWnd, IDC_MONITOR_TEXT, s.c_str());
+
+			// This is where we throw stuff against the TreeView and see what sticks
+			//
+			TVINSERTSTRUCT tvInsertStruct;
+			SecureZeroMemory(&tvInsertStruct, sizeof(tvInsertStruct));
+			tvInsertStruct.hInsertAfter = TVI_ROOT;
+			tvInsertStruct.itemex.mask = TVIF_TEXT;
+			wchar_t buf[1024];
+			StringCbCopy(buf, sizeof(buf), Monitor::GetMonitorDeviceString(monitorNumber).c_str());
+			tvInsertStruct.itemex.pszText = buf;
+			LRESULT tvRoot;
+			tvRoot = SendMessage(treeControlHwnd, TVM_INSERTITEM, 0, (LPARAM)&tvInsertStruct);
+			tvInsertStruct.hParent = (HTREEITEM)tvRoot;
+			tvInsertStruct.hInsertAfter = TVI_LAST;
+			tvInsertStruct.itemex.pszText = L"Added node";
+			tvInsertStruct.itemex.state = TVIS_STATEIMAGEMASK;
+			tvInsertStruct.itemex.stateMask = TVIS_STATEIMAGEMASK;
+			LRESULT tvSubNode;
+			tvSubNode = SendMessage(treeControlHwnd, TVM_INSERTITEM, 0, (LPARAM)&tvInsertStruct);
+			tvInsertStruct.hParent = (HTREEITEM)tvSubNode;
+			tvInsertStruct.itemex.pszText = L"Deeper node";
+			LRESULT tvRet;
+			tvRet = SendMessage(treeControlHwnd, TVM_INSERTITEM, 0, (LPARAM)&tvInsertStruct);
+			tvRet = SendMessage(treeControlHwnd, TVM_EXPAND, TVE_EXPAND, tvRoot);
+			tvRet = SendMessage(treeControlHwnd, TVM_EXPAND, TVE_EXPAND, tvSubNode);
+
 			break;
 		}
 
@@ -425,7 +462,8 @@ int ShowLUTLoaderDialog(void) {
 		//
 		pages[0].dwSize = sizeof(pages[0]);
 		pages[0].hInstance = g_hInst;
-		pages[0].pszTemplate = MAKEINTRESOURCE(IDD_SUMMARY_PAGE);
+		pages[0].pszTemplate = MAKEINTRESOURCE(IDD_SUMMARY_PAGE_2);
+		//pages[0].pszTemplate = MAKEINTRESOURCE(IDD_SUMMARY_PAGE);
 		pages[0].pszIcon = NULL;
 		pages[0].pfnDlgProc = SummaryPageProc;
 		pages[0].lParam = 0;
@@ -436,7 +474,8 @@ int ShowLUTLoaderDialog(void) {
 		for (size_t i = 0; i < listSize; ++i) {
 			pages[i+1].dwSize = sizeof(pages[0]);
 			pages[i+1].hInstance = g_hInst;
-			pages[i+1].pszTemplate = MAKEINTRESOURCE(IDD_MONITOR_PAGE);
+			pages[i+1].pszTemplate = MAKEINTRESOURCE(IDD_MONITOR_PAGE_2);
+			//pages[i+1].pszTemplate = MAKEINTRESOURCE(IDD_MONITOR_PAGE);
 			pages[i+1].pszIcon = NULL;
 			pages[i+1].pfnDlgProc = MonitorPageProc;
 			pages[i+1].lParam = i;

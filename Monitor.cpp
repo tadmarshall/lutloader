@@ -8,12 +8,12 @@
 
 // Constructor
 //
-Monitor::Monitor(int adapterNumber, const DISPLAY_DEVICEW * displayMonitor) :
-		DeviceName(displayMonitor->DeviceName),
-		DeviceString(displayMonitor->DeviceString),
-		StateFlags(displayMonitor->StateFlags),
-		DeviceID(displayMonitor->DeviceID),
-		DeviceKey(displayMonitor->DeviceKey),
+Monitor::Monitor(int adapterNumber, const DISPLAY_DEVICEW & displayMonitor) :
+		DeviceName(displayMonitor.DeviceName),
+		DeviceString(displayMonitor.DeviceString),
+		StateFlags(displayMonitor.StateFlags),
+		DeviceID(displayMonitor.DeviceID),
+		DeviceKey(displayMonitor.DeviceKey),
 		activeProfileIsUserProfile(false),
 		AdapterNumber(adapterNumber)
 {
@@ -36,7 +36,7 @@ Monitor::Monitor(int adapterNumber, const DISPLAY_DEVICEW * displayMonitor) :
 			registryKey,
 			_countof(registryKey),
 			L"Software\\Microsoft\\Windows NT\\CurrentVersion\\ICM\\ProfileAssociations\\Display");
-		wcscat_s(registryKey, _countof(registryKey), &displayMonitor->DeviceKey[len]);
+		wcscat_s(registryKey, _countof(registryKey), &displayMonitor.DeviceKey[len]);
 		userProfileName = Profile::FindProfileName(HKEY_CURRENT_USER, registryKey, &activeProfileIsUserProfile);
 		if (userProfileName) {
 			UserProfile.SetName(userProfileName);
@@ -51,7 +51,7 @@ Monitor::Monitor(int adapterNumber, const DISPLAY_DEVICEW * displayMonitor) :
 	//
 	wchar_t * systemProfileName;
 	len = lstrlenW(L"\\Registry\\Machine\\");
-	wcscpy_s(registryKey, _countof(registryKey), &displayMonitor->DeviceKey[len]);
+	wcscpy_s(registryKey, _countof(registryKey), &displayMonitor.DeviceKey[len]);
 	systemProfileName = Profile::FindProfileName(HKEY_LOCAL_MACHINE, registryKey, 0);
 	if (systemProfileName) {
 		SystemProfile.SetName(systemProfileName);
@@ -141,8 +141,8 @@ wstring Monitor::DetailsString(void) const {
 
 // Return 'true' if this monitor is active and part of the desktop
 //
-bool Monitor::IsMonitorActive(const DISPLAY_DEVICEW * displayMonitor) {
-	return (displayMonitor->StateFlags & DISPLAY_DEVICE_ACTIVE) && (displayMonitor->StateFlags & DISPLAY_DEVICE_ATTACHED);
+bool Monitor::IsMonitorActive(const DISPLAY_DEVICEW & displayMonitor) {
+	return (displayMonitor.StateFlags & DISPLAY_DEVICE_ACTIVE) && (displayMonitor.StateFlags & DISPLAY_DEVICE_ATTACHED);
 }
 
 // Vector of monitors

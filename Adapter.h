@@ -7,7 +7,7 @@
 class Adapter {
 
 public:
-	Adapter(const DISPLAY_DEVICEW * displayAdapter);
+	Adapter(const DISPLAY_DEVICEW & displayAdapter);
 
 	static bool IsAdapterActive(const DISPLAY_DEVICEW * displayAdapter);
 	static void ClearAdapterList(bool freeAllMemory);
