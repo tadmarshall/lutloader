@@ -363,6 +363,10 @@
 				>
 			</File>
 			<File
+				RelativePath=".\Resize.cpp"
+				>
+			</File>
+			<File
 				RelativePath=".\stdafx.cpp"
 				>
 			</File>
@@ -386,6 +390,10 @@
 			</File>
 			<File
 				RelativePath=".\Profile.h"
+				>
+			</File>
+			<File
+				RelativePath=".\Resize.h"
 				>
 			</File>
 			<File

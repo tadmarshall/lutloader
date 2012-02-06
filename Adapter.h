@@ -9,13 +9,12 @@ class Adapter {
 public:
 	Adapter(const DISPLAY_DEVICEW * displayAdapter);
 
-	//static bool IsAdapterActive(const PDISPLAY_DEVICE displayAdapter);
 	static bool IsAdapterActive(const DISPLAY_DEVICEW * displayAdapter);
 	static void ClearAdapterList(bool freeAllMemory);
 	static void AddAdapter(const Adapter & adapter);
 	static DWORD GetAdapterStateFlags(int adapterNumber);
 	static wstring GetAdapterDeviceName(int adapterNumber);
-//DISPLAY_DEVICEW
+
 private:
 	wstring DeviceName;
 	wstring DeviceString;

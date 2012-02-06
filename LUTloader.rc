@@ -53,15 +53,17 @@ END
 //
 
 IDD_SUMMARY_PAGE DIALOGEX 0, 0, 400, 199
-STYLE DS_SETFONT | DS_FIXEDSYS | WS_POPUP | WS_VISIBLE | WS_CAPTION | WS_THICKFRAME
+STYLE DS_SETFONT | DS_FIXEDSYS | WS_POPUP | WS_VISIBLE | WS_CAPTION
 CAPTION "Summary"
 FONT 8, "MS Shell Dlg", 0, 0, 0x0
 BEGIN
     EDITTEXT        IDC_SUMMARY_TEXT,6,6,386,185,ES_MULTILINE | ES_READONLY | NOT WS_BORDER | WS_GROUP | NOT WS_TABSTOP
+    LTEXT           "Hidden, original size",IDC_ORIGINAL_SIZE,6,6,386,185,NOT WS_VISIBLE
+    LTEXT           "Hidden, resized",IDC_RESIZED,6,6,386,185,NOT WS_VISIBLE
 END
 
 IDD_MONITOR_PAGE DIALOGEX 0, 0, 400, 199
-STYLE DS_SETFONT | DS_FIXEDSYS | WS_CHILD | WS_VISIBLE | WS_CAPTION | WS_THICKFRAME
+STYLE DS_SETFONT | DS_FIXEDSYS | WS_CHILD | WS_VISIBLE | WS_CAPTION
 CAPTION "Details"
 FONT 8, "MS Shell Dlg", 0, 0, 0x0
 BEGIN
@@ -137,6 +139,15 @@ END
 
 /////////////////////////////////////////////////////////////////////////////
 //
+// Icon
+//
+
+// Icon with lowest ID value placed first to ensure application icon
+// remains consistent on all systems.
+IDI_BACKCOLOR           ICON                    "backcolo.ico"
+
+/////////////////////////////////////////////////////////////////////////////
+//
 // String Table
 //
 
@@ -151,13 +162,6 @@ END
 
 #endif    // English (U.S.) resources
 /////////////////////////////////////////////////////////////////////////////
-
-/////////////////////////////////////////////////////////////////////////////
-//
-// Icon
-//
-
-IDI_BACKCOLOR           ICON    DISCARDABLE     "backcolo.ico"
 
 
 

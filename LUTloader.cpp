@@ -6,17 +6,20 @@
 #include <commctrl.h>
 #include "Adapter.h"
 #include "Monitor.h"
+#include "Utility.h"
+#include "Resize.h"
 #include "resource.h"
 #include <strsafe.h>
 
-#include <winuser.h>
-#include <prsht.h>
+#include <commctrl.h>
+//#include <winuser.h>
+//#include <prsht.h>
 
 #pragma comment(lib, "mscms.lib")
 
 // Globals
 //
-HINSTANCE g_hInst;					// Instance handle
+HINSTANCE g_hInst = 0;					// Instance handle
 
 // Try for visual styles, if available
 //
@@ -78,13 +81,8 @@ int LoadLUTs(void) {
 	return 0;
 }
 
-	static WNDPROC oldPropSheetWindowProc = 0;
-	static WINDOWINFO baseWindowInfo;
-	static HWND parentWindow;
-	static SIZE previousParentWindowSize;
-	static RECT previousCancelButtonRect;
-	static SIZE previousCancelButtonSize;
-	static POINT propertySheetClientAreaOffset;
+static WNDPROC oldPropSheetWindowProc = 0;
+static SIZE minimumWindowSize = {0};
 
 // Subclass procedure for the main PropertySheet
 //
@@ -94,54 +92,36 @@ INT_PTR CALLBACK PropSheetSubclassProc(HWND hWnd, UINT uMessage, WPARAM wParam, 
 
 		// Notice changes in window size
 		//
-		case WM_WINDOWPOSCHANGED:
+		case WM_WINDOWPOSCHANGING:
 			WINDOWPOS * pWindowPos;
 			pWindowPos = reinterpret_cast<WINDOWPOS *>(lParam);
-
-			if ( 0 == (pWindowPos->flags & SWP_NOSIZE) && 0 != parentWindow ) {
-
-				// Main window has resized, move or resize all controls
-				//
-				HWND dlgid;
-				dlgid = GetDlgItem(hWnd, IDCANCEL);
-
-				// Compute the PropertySheet's size delta, which we can then just add to our 'previous' Cancel button rect
-				//
-				SIZE parentSizeDelta;
-				parentSizeDelta.cx = pWindowPos->cx - previousParentWindowSize.cx;
-				parentSizeDelta.cy = pWindowPos->cy - previousParentWindowSize.cy;
-
-				// Move the Cancel button
-				//
-				MoveWindow(
-						dlgid,
-						previousCancelButtonRect.left + parentSizeDelta.cx,
-						previousCancelButtonRect.top + parentSizeDelta.cy,
-						previousCancelButtonSize.cx,
-						previousCancelButtonSize.cy,
-						FALSE
-				);
-
-				// We can fix up redrawing better, I think ...
-				//
-				InvalidateRect(dlgid, NULL, TRUE);
-				//RECT fixupRect;
-				//fixupRect.left = previousCancelButtonRect.left - pWindowPos->x - propertySheetClientAreaOffset.x;
-				//fixupRect.top = previousCancelButtonRect.top - pWindowPos->y - propertySheetClientAreaOffset.y;
-				//fixupRect.right = previousCancelButtonRect.right - pWindowPos->x - propertySheetClientAreaOffset.x;
-				//fixupRect.bottom = previousCancelButtonRect.bottom - pWindowPos->y - propertySheetClientAreaOffset.y;
-				//InvalidateRect(hWnd, &fixupRect, TRUE);
-				InvalidateRect(hWnd, NULL, TRUE);
-
-				previousParentWindowSize.cx = pWindowPos->cx;
-				previousParentWindowSize.cy = pWindowPos->cy;
-
-				previousCancelButtonRect.left += parentSizeDelta.cx;
-				previousCancelButtonRect.top += parentSizeDelta.cy;
-				previousCancelButtonRect.right += parentSizeDelta.cx;
-				previousCancelButtonRect.bottom += parentSizeDelta.cy;
+			if ( 0 == (pWindowPos->flags & SWP_NOSIZE) && Resize::GetNeedRebuild() ) {
+				Resize::SetupForResizing(hWnd);
+				Resize::SetNeedRebuild(false);
 			}
 			return CallWindowProc(oldPropSheetWindowProc, hWnd, uMessage, wParam, lParam);
+			break;
+
+		// Notice changes in window size
+		//
+		case WM_WINDOWPOSCHANGED:
+			pWindowPos = reinterpret_cast<WINDOWPOS *>(lParam);
+			if ( 0 == (pWindowPos->flags & SWP_NOSIZE) ) {
+				Resize::MainWindowHasResized(*pWindowPos);
+			}
+			return CallWindowProc(oldPropSheetWindowProc, hWnd, uMessage, wParam, lParam);
+			break;
+
+		// Disallow resizing to smaller than the original size
+		//
+		case WM_GETMINMAXINFO:
+			if ( 0 != minimumWindowSize.cx ) {
+				MINMAXINFO * pMINMAXINFO;
+				pMINMAXINFO = reinterpret_cast<MINMAXINFO *>(lParam);
+				pMINMAXINFO->ptMinTrackSize.x = minimumWindowSize.cx;
+				pMINMAXINFO->ptMinTrackSize.y = minimumWindowSize.cy;
+				return 0;
+			}
 			break;
 
 		default:
@@ -153,7 +133,6 @@ INT_PTR CALLBACK PropSheetSubclassProc(HWND hWnd, UINT uMessage, WPARAM wParam, 
 // PropertySheet callback routine
 //
 int CALLBACK PropSheetCallback(HWND hWnd, UINT uMsg, LPARAM lParam) {
-
 	UNREFERENCED_PARAMETER(hWnd);
 
 	switch(uMsg) {
@@ -169,16 +148,29 @@ int CALLBACK PropSheetCallback(HWND hWnd, UINT uMsg, LPARAM lParam) {
 
 		case PSCB_INITIALIZED:
 
+			// Add the SysTabControl32 control to the anchor list
+			//
+			HWND tabControl;
+			tabControl = FindWindowEx(hWnd, NULL, L"SysTabControl32", NULL);
+			if (tabControl) {
+				ANCHOR_PRESET anchorPreset;
+				anchorPreset.hwnd = tabControl;
+				anchorPreset.anchorLeft = true;
+				anchorPreset.anchorTop = true;
+				anchorPreset.anchorRight = true;
+				anchorPreset.anchorBottom = true;
+				Resize::AddAchorPreset(anchorPreset);
+			}
+
 			// Subclass the property sheet
 			//
 			oldPropSheetWindowProc = (WNDPROC)(INT_PTR)SetWindowLongPtr(hWnd, GWLP_WNDPROC, (__int3264)(LONG_PTR)PropSheetSubclassProc);
 			break;
-
 	}
 	return 0;
 }
 
-	static WNDPROC oldWindowProc = 0;
+static WNDPROC oldEditWindowProc = 0;
 
 // Subclass procedure for edit control
 //
@@ -191,7 +183,7 @@ INT_PTR CALLBACK EditSubclassProc(HWND hWnd, UINT uMessage, WPARAM wParam, LPARA
 		//
 		case WM_GETDLGCODE:
 			INT_PTR temp;
-			temp = CallWindowProcW(oldWindowProc, hWnd, uMessage, wParam, lParam);
+			temp = CallWindowProcW(oldEditWindowProc, hWnd, uMessage, wParam, lParam);
 			return temp & ~DLGC_HASSETSEL;
 			break;
 #endif
@@ -203,16 +195,19 @@ INT_PTR CALLBACK EditSubclassProc(HWND hWnd, UINT uMessage, WPARAM wParam, LPARA
 				uMessage = EM_SETSEL;
 				wParam = 0;
 				lParam = -1;
-				return CallWindowProc(oldWindowProc, hWnd, uMessage, wParam, lParam);
+				return CallWindowProc(oldEditWindowProc, hWnd, uMessage, wParam, lParam);
 			}
-			return CallWindowProc(oldWindowProc, hWnd, uMessage, wParam, lParam);
+			return CallWindowProc(oldEditWindowProc, hWnd, uMessage, wParam, lParam);
 			break;
 
 		default:
 			break;
 	}
-	return CallWindowProc(oldWindowProc, hWnd, uMessage, wParam, lParam);
+	return CallWindowProc(oldEditWindowProc, hWnd, uMessage, wParam, lParam);
 }
+
+static HWND hwnd_IDC_ORIGINAL_SIZE = 0;
+static HWND hwnd_IDC_RESIZED = 0;
 
 // Summary page dialog proc
 //
@@ -226,35 +221,52 @@ INT_PTR CALLBACK SummaryPageProc(HWND hWnd, UINT uMessage, WPARAM wParam, LPARAM
 		{
 			// Subclass the edit control
 			//
-			oldWindowProc = (WNDPROC)(INT_PTR)SetWindowLongPtr(GetDlgItem(hWnd, IDC_SUMMARY_TEXT), GWLP_WNDPROC, (__int3264)(LONG_PTR)EditSubclassProc);
+			oldEditWindowProc = (WNDPROC)(INT_PTR)SetWindowLongPtr(GetDlgItem(hWnd, IDC_SUMMARY_TEXT), GWLP_WNDPROC, (__int3264)(LONG_PTR)EditSubclassProc);
 
-			// Collect base information for dialog resizing
+			// This page and its subwindows should grow with resizing
 			//
-			parentWindow = GetParent(hWnd);
-			SecureZeroMemory(&baseWindowInfo, sizeof(baseWindowInfo));
-			baseWindowInfo.cbSize = sizeof(baseWindowInfo);
-			GetWindowInfo(parentWindow, &baseWindowInfo);
+			ANCHOR_PRESET anchorPreset;
+			anchorPreset.hwnd = hWnd;
+			anchorPreset.anchorLeft = true;
+			anchorPreset.anchorTop = true;
+			anchorPreset.anchorRight = true;
+			anchorPreset.anchorBottom = true;
+			Resize::AddAchorPreset(anchorPreset);
 
-			previousParentWindowSize.cx = baseWindowInfo.rcWindow.right - baseWindowInfo.rcWindow.left;
-			previousParentWindowSize.cy = baseWindowInfo.rcWindow.bottom - baseWindowInfo.rcWindow.top;
+			anchorPreset.hwnd = GetDlgItem(hWnd, IDC_SUMMARY_TEXT);
+			Resize::AddAchorPreset(anchorPreset);
 
-			propertySheetClientAreaOffset.x = baseWindowInfo.rcClient.left - baseWindowInfo.rcWindow.left;
-			propertySheetClientAreaOffset.y = baseWindowInfo.rcClient.top - baseWindowInfo.rcWindow.top;
+			// These two hidden windows are used to track resizing prior to
+			// other pages being created.  We set IDC_RESIZED to grow in all
+			// dimensions, and set IDC_ORIGINAL_SIZE to not grow at all.
+			// By comparing their sizes, we can fix up the sizes and positions
+			// of newly created controls on other pages.
+			//
+			hwnd_IDC_RESIZED = GetDlgItem(hWnd, IDC_RESIZED);
+			anchorPreset.hwnd = hwnd_IDC_RESIZED;
+			Resize::AddAchorPreset(anchorPreset);
 
-			GetWindowRect(GetDlgItem(parentWindow, IDCANCEL), &previousCancelButtonRect);
+			anchorPreset.anchorLeft = false;
+			anchorPreset.anchorTop = false;
+			anchorPreset.anchorRight = false;
+			anchorPreset.anchorBottom = false;
+			hwnd_IDC_ORIGINAL_SIZE = GetDlgItem(hWnd, IDC_ORIGINAL_SIZE);
+			anchorPreset.hwnd = hwnd_IDC_ORIGINAL_SIZE;
+			Resize::AddAchorPreset(anchorPreset);
 
-			previousCancelButtonSize.cx = previousCancelButtonRect.right - previousCancelButtonRect.left;
-			previousCancelButtonSize.cy = previousCancelButtonRect.bottom - previousCancelButtonRect.top;
+			// Tell the resizing system that its window list is out of date
+			//
+			Resize::SetNeedRebuild(true);
 
-			previousCancelButtonRect.left -= baseWindowInfo.rcClient.left;
-			previousCancelButtonRect.top -= baseWindowInfo.rcClient.top;
-			previousCancelButtonRect.right -= baseWindowInfo.rcClient.left;
-			previousCancelButtonRect.bottom -= baseWindowInfo.rcClient.top;
+			RECT rect;
+			GetWindowRect(GetParent(hWnd), &rect);
+			minimumWindowSize.cx = rect.right - rect.left;
+			minimumWindowSize.cy = rect.bottom - rect.top;
 
 			// Build a display string describing the monitors we found
 			//
 			wstring summaryString;
-			for (size_t i = 0; i < Monitor::GetMonitorListSize(); i++) {
+			for (size_t i = 0; i < Monitor::GetMonitorListSize(); ++i) {
 				if ( !summaryString.empty() ) {
 					summaryString += L"\r\n\r\n";					// Skip a line between monitors
 				}
@@ -313,16 +325,51 @@ INT_PTR CALLBACK MonitorPageProc(HWND hWnd, UINT uMessage, WPARAM wParam, LPARAM
 		{
 			// Subclass the edit control
 			//
-			oldWindowProc = (WNDPROC)(INT_PTR)SetWindowLongPtr(GetDlgItem(hWnd, IDC_MONITOR_TEXT), GWLP_WNDPROC, (__int3264)(LONG_PTR)EditSubclassProc);
+			HWND editControlHwnd = GetDlgItem(hWnd, IDC_MONITOR_TEXT);
+			oldEditWindowProc = (WNDPROC)(INT_PTR)SetWindowLongPtr(editControlHwnd, GWLP_WNDPROC, (__int3264)(LONG_PTR)EditSubclassProc);
 
-			//wchar_t cString[1024];
-			//GetWindowText(hWnd, cString, _countof(cString));
-			//GetWindowText(GetParent(hWnd), cString, _countof(cString));
+			// This page and its subwindows should grow with resizing
+			//
+			ANCHOR_PRESET anchorPreset;
+			anchorPreset.hwnd = hWnd;
+			anchorPreset.anchorLeft = true;
+			anchorPreset.anchorTop = true;
+			anchorPreset.anchorRight = true;
+			anchorPreset.anchorBottom = true;
+			Resize::AddAchorPreset(anchorPreset);
 
-			//WINDOWINFO wi;
-			//SecureZeroMemory(&wi, sizeof(wi));
-			//wi.cbSize = sizeof(wi);
-			//GetWindowInfo(GetParent(hWnd), &wi);
+			anchorPreset.hwnd = editControlHwnd;
+			Resize::AddAchorPreset(anchorPreset);
+
+			// Fix up the size of the edit control in case the Summary tab was resized
+			// before this tab was created.
+			//
+			RECT originalSize;
+			RECT newSize;
+			GetClientRect(hwnd_IDC_ORIGINAL_SIZE, &originalSize);
+			GetClientRect(hwnd_IDC_RESIZED, &newSize);
+			SIZE sizeDelta;
+			sizeDelta.cx = newSize.right - originalSize.right;
+			sizeDelta.cy = newSize.bottom - originalSize.bottom;
+			RECT editSize;
+			GetWindowRect(editControlHwnd, &editSize);
+			WINDOWINFO wiParent;
+			SecureZeroMemory(&wiParent, sizeof(wiParent));
+			wiParent.cbSize = sizeof(wiParent);
+			GetWindowInfo(hWnd, &wiParent);
+			editSize.left -= wiParent.rcClient.left;
+			editSize.top -= wiParent.rcClient.top;
+			editSize.right -= wiParent.rcClient.left;
+			editSize.bottom -= wiParent.rcClient.top;
+			//ScreenToClient(editControlHwnd, reinterpret_cast<POINT *>(&editSize.left));
+			//ScreenToClient(editControlHwnd, reinterpret_cast<POINT *>(&editSize.right));
+			editSize.right += sizeDelta.cx;
+			editSize.bottom += sizeDelta.cy;
+			MoveWindow(editControlHwnd, editSize.left, editSize.top, editSize.right, editSize.bottom, FALSE);
+
+			// Tell the resizing system that its window list is out of date
+			//
+			Resize::SetNeedRebuild(true);
 
 			// Build a display string describing this monitor and its profile
 			//
@@ -372,7 +419,7 @@ int ShowLUTLoaderDialog(void) {
 		pages = new PROPSHEETPAGE[pageCount];
 		headers = (wchar_t (*)[128])new wchar_t[Monitor::GetMonitorListSize() * 128];
 		SecureZeroMemory(&psh, sizeof(psh));
-		SecureZeroMemory(pages, sizeof(pages[0]) * pageCount);
+		SecureZeroMemory(pages, sizeof(PROPSHEETPAGE) * pageCount);
 
 		// Set up the Summary page
 		//
@@ -386,8 +433,7 @@ int ShowLUTLoaderDialog(void) {
 		// Set up a page for each monitor
 		//
 		size_t listSize = Monitor::GetMonitorListSize();
-		for (size_t i = 0; i < listSize; i++) {
-		//for (size_t i = 0; i < Monitor::GetMonitorListSize(); i++) {
+		for (size_t i = 0; i < listSize; ++i) {
 			pages[i+1].dwSize = sizeof(pages[0]);
 			pages[i+1].hInstance = g_hInst;
 			pages[i+1].pszTemplate = MAKEINTRESOURCE(IDD_MONITOR_PAGE);
@@ -419,12 +465,12 @@ int ShowLUTLoaderDialog(void) {
 		psh.ppsp = pages;
 		psh.pfnCallback = PropSheetCallback;
 		INT_PTR retVal = PropertySheet(&psh);
-		if ( retVal < 0 ) {
-			wchar_t errorMessage[256];
+		DWORD err = GetLastError();
+		if ( err || (retVal < 0) ) {
+			wstring s = ShowError(L"PropertySheet");
 			wchar_t errorMessageCaption[256];
-			LoadString(g_hInst, IDS_PROPSHEET_FAILURE, errorMessage, _countof(errorMessage));
 			LoadString(g_hInst, IDS_ERROR, errorMessageCaption, _countof(errorMessageCaption));
-			MessageBox(NULL, errorMessage, errorMessageCaption, MB_ICONINFORMATION | MB_OK);
+			MessageBox(NULL, s.c_str(), errorMessageCaption, MB_ICONINFORMATION | MB_OK);
 		}
 
 		delete [] pages;
@@ -494,7 +540,6 @@ int WINAPI WinMain(
 
 #ifdef DEBUG_MEMORY_LEAKS
 	//_crtBreakAlloc = 147;		// To debug memory leaks, set this to allocation number ("{nnn}")
-	//_crtBreakAlloc = 168;		// To debug memory leaks, set this to allocation number ("{nnn}")
 #endif
 
 	// Turn on DEP, if available
@@ -531,6 +576,9 @@ int WINAPI WinMain(
 #ifdef DEBUG_MEMORY_LEAKS
 	Monitor::ClearMonitorList(true);		// Forcibly free all vector memory to help see actual memory leaks
 	Adapter::ClearAdapterList(true);
+	Resize::ClearResizeList(true);
+	Resize::ClearAnchorPresetList(true);
+
 	OutputDebugString(L">>>> LUTloader memory leak list -- start\n");
 	_CrtDumpMemoryLeaks();
 	OutputDebugString(L"<<<< LUTloader memory leak list -- end\n\n");
