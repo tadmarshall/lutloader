@@ -1,28 +1,6 @@
 // LUTloader.cpp : Main program file to load Look-Up Tables into display adapters/monitors
 // based on the configured monitor profiles.
 //
-// $Log: /LUT Loader.root/LUT Loader/LUTloader.cpp $
-// 
-// 4     6/27/10 2:20p Tad
-// Convert from MessageBox() to a single-page PropertySheet.  Parse the
-// command line for an exact match to "/L" and run a stub (do-nothing for
-// now) routine.  Eventually, this will load the LUTs and not show any UI.
-// 
-// 3     6/26/10 8:23p Tad
-// Modified code to display both a per-user profile and the system default
-// profile and which is active when running on Vista and higher.
-// 
-// 2     6/23/10 7:12a Tad
-// Fixed bugs with extracting profile name, especially when none is set.
-// Added some code to view the head of the gamma ramp.
-// 
-// 1     6/20/10 6:44p Tad
-// First checkin.  It shows the correct monitors and profile names on XP,
-// is basically a C program, doesn't do any LUT loading and only shows the
-// machine-level settings on Vista or Windows 7.  Works correctly (for
-// what it does) on my Windows XP machine with the driver (etc.) that
-// reports both monitors on both display adapters.
-// 
 
 #include "stdafx.h"
 #include <commctrl.h>
@@ -30,6 +8,9 @@
 #include "Monitor.h"
 #include "resource.h"
 #include <strsafe.h>
+
+#include <winuser.h>
+#include <prsht.h>
 
 #pragma comment(lib, "mscms.lib")
 
@@ -59,7 +40,7 @@ void FetchMonitorInfo(void) {
 	while ( EnumDisplayDevices(NULL, iAdapterNum, &displayAdapter, 0) ) {
 		if ( Adapter::IsAdapterActive(&displayAdapter) ) {
 			Adapter * adapter = new Adapter(&displayAdapter);
-			Adapter::AddAdapter( adapter );
+			Adapter::AddAdapter(*adapter);
 			delete adapter;
 
 			// Loop through all monitors on this display adapter
@@ -71,7 +52,7 @@ void FetchMonitorInfo(void) {
 			while ( EnumDisplayDevices(displayAdapter.DeviceName, iMonitorNum, &displayMonitor, 0) ) {
 				if ( Monitor::IsMonitorActive(&displayMonitor) ) {
 					Monitor * monitor = new Monitor(iAdapterNum, &displayMonitor);
-					Monitor::AddMonitor( monitor );
+					Monitor::AddMonitor(*monitor);
 					delete monitor;
 				}
 				++iMonitorNum;
@@ -92,16 +73,57 @@ int LoadLUTs(void) {
 	// TODO -- for now, just show a message box
 	//
 	wchar_t szCaption[256];
-	LoadString(g_hInst, IDS_CAPTION, szCaption, COUNTOF(szCaption));
+	LoadString(g_hInst, IDS_CAPTION, szCaption, _countof(szCaption));
 	MessageBox(NULL, L"Load LUTs only", szCaption, MB_ICONINFORMATION | MB_OK);
 	return 0;
 }
 
 // PropertySheet callback routine
 //
-//int CALLBACK PropSheetCallback(HWND hWnd, UINT uMsg, LPARAM lParam) {
-//	return 0;
-//}
+int CALLBACK PropSheetCallback(HWND hWnd, UINT uMsg, LPARAM lParam) {
+
+	UNREFERENCED_PARAMETER(hWnd);
+	UNREFERENCED_PARAMETER(uMsg);
+	UNREFERENCED_PARAMETER(lParam);
+
+	return 0;
+}
+
+	static WNDPROC oldWindowProc = 0;
+
+// Subclass procedure for edit control
+//
+INT_PTR CALLBACK EditSubclassProc(HWND hWnd, UINT uMessage, WPARAM wParam, LPARAM lParam) {
+
+	switch (uMessage) {
+
+#if 0
+		// This prevents us from auto-selecting all text when we get the focus
+		//
+		case WM_GETDLGCODE:
+			INT_PTR temp;
+			temp = CallWindowProcW(oldWindowProc, hWnd, uMessage, wParam, lParam);
+			return temp & ~DLGC_HASSETSEL;
+			break;
+#endif
+
+		// This enables control-A as a hotkey for Select All
+		//
+		case WM_CHAR:
+			if (1 == wParam) {
+				uMessage = EM_SETSEL;
+				wParam = 0;
+				lParam = -1;
+				return CallWindowProc(oldWindowProc, hWnd, uMessage, wParam, lParam);
+			}
+			return CallWindowProc(oldWindowProc, hWnd, uMessage, wParam, lParam);
+			break;
+
+		default:
+			break;
+	}
+	return CallWindowProc(oldWindowProc, hWnd, uMessage, wParam, lParam);
+}
 
 // Summary page dialog proc
 //
@@ -112,8 +134,11 @@ INT_PTR CALLBACK SummaryPageProc(HWND hWnd, UINT uMessage, WPARAM wParam, LPARAM
 
 	switch (uMessage) {
 		case WM_INITDIALOG:
-
 		{
+			// Subclass the edit control
+			//
+			oldWindowProc = (WNDPROC)(INT_PTR)SetWindowLongPtr(GetDlgItem(hWnd, IDC_SUMMARY_TEXT), GWLP_WNDPROC, (__int3264)(LONG_PTR)EditSubclassProc);
+
 			// Build a display string describing the monitors we found
 			//
 			wstring summaryString;
@@ -125,9 +150,11 @@ INT_PTR CALLBACK SummaryPageProc(HWND hWnd, UINT uMessage, WPARAM wParam, LPARAM
 			}
 			if ( summaryString.empty() ) {
 				wchar_t noMonitorsFound[256];
-				LoadString(g_hInst, IDS_NO_MONITORS_FOUND, noMonitorsFound, COUNTOF(noMonitorsFound));
+				LoadString(g_hInst, IDS_NO_MONITORS_FOUND, noMonitorsFound, _countof(noMonitorsFound));
 				SetDlgItemText(hWnd, IDC_SUMMARY_TEXT, noMonitorsFound);
 			} else {
+				DWORD tabSpacing = 8;
+				SendDlgItemMessage(hWnd, IDC_MONITOR_TEXT, EM_SETTABSTOPS, 1, (LPARAM)&tabSpacing);
 				SetDlgItemText(hWnd, IDC_SUMMARY_TEXT, summaryString.c_str());
 			}
 			break;
@@ -148,17 +175,23 @@ INT_PTR CALLBACK SummaryPageProc(HWND hWnd, UINT uMessage, WPARAM wParam, LPARAM
 INT_PTR CALLBACK MonitorPageProc(HWND hWnd, UINT uMessage, WPARAM wParam, LPARAM lParam) {
 
 	UNREFERENCED_PARAMETER(wParam);
-	UNREFERENCED_PARAMETER(lParam);
 
 	switch (uMessage) {
 		case WM_INITDIALOG:
 		{
-			wstring s;
+			// Subclass the edit control
+			//
+			oldWindowProc = (WNDPROC)(INT_PTR)SetWindowLongPtr(GetDlgItem(hWnd, IDC_MONITOR_TEXT), GWLP_WNDPROC, (__int3264)(LONG_PTR)EditSubclassProc);
 
+			// Build a display string describing this monitor and its profile
+			//
+			wstring s;
 			size_t monitorNumber = ((PROPSHEETPAGE *)lParam)->lParam;
 			s += Monitor::GetMonitor(monitorNumber).SummaryString();
 			s += L"\r\n\r\n";
 			s += Monitor::GetMonitor(monitorNumber).DetailsString();
+			DWORD tabSpacing = 8;
+			SendDlgItemMessage(hWnd, IDC_MONITOR_TEXT, EM_SETTABSTOPS, 1, (LPARAM)&tabSpacing);
 			SetDlgItemText(hWnd, IDC_MONITOR_TEXT, s.c_str());
 			break;
 		}
@@ -229,23 +262,24 @@ int ShowLUTLoaderDialog(void) {
 		psh.dwFlags =
 			PSH_PROPSHEETPAGE	|
 			PSH_NOAPPLYNOW		|
-			PSH_NOCONTEXTHELP
+			PSH_NOCONTEXTHELP	|
+			PSH_USECALLBACK
 			;
 		psh.hwndParent = NULL;
 		psh.hInstance = g_hInst;
 		psh.hIcon = NULL;
 		wchar_t szCaption[256];
-		LoadString(g_hInst, IDS_CAPTION, szCaption, COUNTOF(szCaption));
+		LoadString(g_hInst, IDS_CAPTION, szCaption, _countof(szCaption));
 		psh.pszCaption = szCaption;
 		psh.nPages = (UINT)pageCount;
 		psh.ppsp = pages;
-		//psh.pfnCallback = PropSheetCallback;
+		psh.pfnCallback = PropSheetCallback;
 		INT_PTR retVal = PropertySheet(&psh);
 		if ( retVal < 0 ) {
 			wchar_t errorMessage[256];
 			wchar_t errorMessageCaption[256];
-			LoadString(g_hInst, IDS_PROPSHEET_FAILURE, errorMessage, COUNTOF(errorMessage));
-			LoadString(g_hInst, IDS_ERROR, errorMessageCaption, COUNTOF(errorMessageCaption));
+			LoadString(g_hInst, IDS_PROPSHEET_FAILURE, errorMessage, _countof(errorMessage));
+			LoadString(g_hInst, IDS_ERROR, errorMessageCaption, _countof(errorMessageCaption));
 			MessageBox(NULL, errorMessage, errorMessageCaption, MB_ICONINFORMATION | MB_OK);
 		}
 
@@ -293,9 +327,9 @@ int ShowLUTLoaderDialog(void) {
 				bigBuffer[0] = L'\0';
 			}
 		}
-		LoadString(g_hInst, IDS_EXCEPTION, exceptionMessage, COUNTOF(exceptionMessage));
+		LoadString(g_hInst, IDS_EXCEPTION, exceptionMessage, _countof(exceptionMessage));
 		StringCbPrintf(errorMessage, sizeof(errorMessage), exceptionMessage, bigBuffer);
-		LoadString(g_hInst, IDS_ERROR, errorMessageCaption, COUNTOF(errorMessageCaption));
+		LoadString(g_hInst, IDS_ERROR, errorMessageCaption, _countof(errorMessageCaption));
 		MessageBox(NULL, errorMessage, errorMessageCaption, MB_ICONINFORMATION | MB_OK);
 		delete [] bigBuffer;
 		return -1;
@@ -314,21 +348,16 @@ int WINAPI WinMain(
 
 	g_hInst = hInstance;
 
-	//// hack -- just testing macros/functions ...
-	////
-	//DWORD littleEndian = 0x01020304;
-	//DWORD netOrder = htonl(littleEndian);
-	//DWORD hostOrder = ntohl(littleEndian);
-	//(void)netOrder;
-	//(void)hostOrder;
-
+#ifdef DEBUG_MEMORY_LEAKS
 	//_crtBreakAlloc = 147;		// To debug memory leaks, set this to allocation number ("{nnn}")
 	//_crtBreakAlloc = 168;		// To debug memory leaks, set this to allocation number ("{nnn}")
+#endif
 
 	// Turn on DEP, if available
 	//
 	typedef BOOL (WINAPI * PFN_SetProcessDEPPolicy)(DWORD);
-	HINSTANCE hKernel = GetModuleHandle(L"kernel32.dll");
+	HINSTANCE hKernel;
+	hKernel = GetModuleHandle(L"kernel32.dll");
 	if (hKernel) {
 		PFN_SetProcessDEPPolicy p_SetProcessDEPPolicy = (PFN_SetProcessDEPPolicy)GetProcAddress(hKernel, "SetProcessDEPPolicy");
 		if (p_SetProcessDEPPolicy) {
@@ -338,7 +367,13 @@ int WINAPI WinMain(
 
 	// Do not load DLLs from the current directory
 	//
-	SetDllDirectory(L"");
+	typedef BOOL (WINAPI * PFN_SetDllDirectoryW)(LPCWSTR);
+	if (hKernel) {
+		PFN_SetDllDirectoryW p_SetDllDirectoryW = (PFN_SetDllDirectoryW)GetProcAddress(hKernel, "SetDllDirectoryW");
+		if (p_SetDllDirectoryW) {
+			p_SetDllDirectoryW(L"");
+		}
+	}
 
 	// See if we are invoked with the /L switch
 	//

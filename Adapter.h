@@ -7,18 +7,19 @@
 class Adapter {
 
 public:
-	Adapter(PDISPLAY_DEVICE displayAdapter);
+	Adapter(const DISPLAY_DEVICEW * displayAdapter);
 
-	static bool IsAdapterActive(PDISPLAY_DEVICE displayAdapter);
+	//static bool IsAdapterActive(const PDISPLAY_DEVICE displayAdapter);
+	static bool IsAdapterActive(const DISPLAY_DEVICEW * displayAdapter);
 	static void ClearAdapterList(bool freeAllMemory);
-	static void AddAdapter(Adapter * const adapter);
+	static void AddAdapter(const Adapter & adapter);
 	static DWORD GetAdapterStateFlags(int adapterNumber);
 	static wstring GetAdapterDeviceName(int adapterNumber);
-
+//DISPLAY_DEVICEW
 private:
 	wstring DeviceName;
-	DWORD	StateFlags;
 	wstring DeviceString;
+	DWORD	StateFlags;
 	wstring DeviceID;
 	wstring DeviceKey;
 };

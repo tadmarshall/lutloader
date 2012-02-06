@@ -366,6 +366,10 @@
 				RelativePath=".\stdafx.cpp"
 				>
 			</File>
+			<File
+				RelativePath=".\Utility.cpp"
+				>
+			</File>
 		</Filter>
 		<Filter
 			Name="Header Files"
@@ -390,6 +394,14 @@
 			</File>
 			<File
 				RelativePath=".\stdafx.h"
+				>
+			</File>
+			<File
+				RelativePath=".\Utility.h"
+				>
+			</File>
+			<File
+				RelativePath=".\VideoCardGammaTag.h"
 				>
 			</File>
 		</Filter>
