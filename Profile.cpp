@@ -2,9 +2,13 @@
 //
 
 #include "stdafx.h"
+#include "LUT.h"
 #include "Profile.h"
 #include "Utility.h"
 #include <strsafe.h>
+
+	extern wchar_t * ColorDirectory;
+	extern wchar_t * ColorDirectoryErrorString;
 
 // Reverse engineered embedded WCS profile header
 //
@@ -22,98 +26,129 @@ typedef struct tag_WCS_IN_ICC_HEADER {
 	DWORD					wcshdrGMMsize;		// Size of Gamut Map Model
 } WCS_IN_ICC_HEADER;
 
+// ICC encoding of date and time of profile creation
+//
+typedef struct tag_dateTimeNumber {
+	unsigned short		year;
+	unsigned short		month;
+	unsigned short		day;
+	unsigned short		hour;
+	unsigned short		minute;
+	unsigned short		second;
+} dateTimeNumber;
+
+// List of CMMs
+//
+const NAME_LOOKUP knownCMMs[] = {
+	{ 'ADBE',				L"Adobe CMM" },
+	{ 'ACMS',				L"Agfa CMM" },
+	{ 'appl',				L"Apple CMM" },
+	{ 'CCMS',				L"ColorGear CMM" },
+	{ 'UCCM',				L"ColorGear CMM Lite" },
+	{ 'UCMS',				L"ColorGear CMM C" },
+	{ 'EFI ',				L"EFI CMM" },
+	{ 'FF  ',				L"Fuji Film CMM" },
+	{ 'HCMM',				L"Harlequin RIP CMM" },
+	{ 'argl',				L"Argyll CMS CMM" },
+	{ 'LgoS',				L"LogoSync CMM" },
+	{ 'HDM ',				L"Heidelberg CMM" },
+	{ 'lcms',				L"Little CMS CMM" },
+	{ 'KCMS',				L"Kodak CMM" },
+	{ 'MCML',				L"Konica Minolta CMM" },
+	{ 'SIGN',				L"Mutoh CMM" },
+	{ 'RGMS',				L"DeviceLink CMM" },
+	{ 'SICC',				L"SampleICC CMM" },
+	{ '32BT',				L"the imaging factory CMM" },
+	{ 'WTG ',				L"Ware to Go CMM" },
+	{ 'zc00',				L"Zoran CMM" }
+};
+
+// List of profile classes
+//
+const NAME_LOOKUP profileClasses[] = {
+	{ CLASS_MONITOR,		L"Display Device" },
+	{ CLASS_PRINTER,		L"Output Device" },
+	{ CLASS_SCANNER,		L"Input Device" },
+	{ CLASS_LINK,			L"DeviceLink" },
+	{ CLASS_ABSTRACT,		L"Abstract" },
+	{ CLASS_COLORSPACE,		L"ColorSpace Conversion" },
+	{ CLASS_NAMED,			L"Named Color" }
+};
+
+// List of color spaces
+//
+const NAME_LOOKUP colorSpaces[] = {
+	{ 'XYZ ',				L"XYZData" },
+	{ 'Lab ',				L"labData" },
+	{ 'Luv ',				L"luvData" },
+	{ 'YCbr',				L"YCbCrData" },
+	{ 'Yxy ',				L"YxyData" },
+	{ 'RGB ',				L"rgbData" },
+	{ 'GRAY',				L"grayData" },
+	{ 'HSV ',				L"hsvData" },
+	{ 'HLS ',				L"hlsData" },
+	{ 'CMYK',				L"cmykData" },
+	{ 'CMY ',				L"cmyData" },
+	{ '2CLR',				L"2colourData" },
+	{ '3CLR',				L"3colourData" },
+	{ '4CLR',				L"4colourData" },
+	{ '5CLR',				L"5colourData" },
+	{ '6CLR',				L"6colourData" },
+	{ '7CLR',				L"7colourData" },
+	{ '8CLR',				L"8colourData" },
+	{ '9CLR',				L"9colourData" },
+	{ 'ACLR',				L"10colourData" },
+	{ 'BCLR',				L"11colourData" },
+	{ 'CCLR',				L"12colourData" },
+	{ 'DCLR',				L"13colourData" },
+	{ 'ECLR',				L"14colourData" },
+	{ 'FCLR',				L"15colourData" }
+};
+
+// List of Primary Platforms
+//
+const NAME_LOOKUP knownPlatforms[] = {
+	{ 'APPL',				L"Apple Computer, Inc." },
+	{ 'MSFT',				L"Microsoft Corporation" },
+	{ 'SGI ',				L"Silicon Graphics, Inc." },
+	{ 'SUNW',				L"Sun Microsystems, Inc." },
+	{ 'TGNT',				L"Taligent" }
+};
+
+// List of Rendering Intents
+//
+const NAME_LOOKUP renderingIntents[] = {
+	{ INTENT_PERCEPTUAL,				L"Perceptual" },
+	{ INTENT_RELATIVE_COLORIMETRIC,		L"Media-Relative Colorimetric" },
+	{ INTENT_SATURATION,				L"Saturation" },
+	{ INTENT_ABSOLUTE_COLORIMETRIC,		L"ICC-Absolute Colorimetric" }
+};
+
 // Constructor
 //
-Profile::Profile() :
+Profile::Profile(const wchar_t * profileName) :
+		ProfileName(profileName),
+		loaded(false),
+		Index(-1),
+		RefCount(1),
 		ProfileHeader(0),
 		TagCount(0),
 		TagTable(0),
 		pVCGT(0),
+		pLUT(0),
 		vcgtIndex(-1),
 		wcsProfileIndex(-1)
 {
 	ProfileSize.QuadPart = 0;
-}
-
-// Copy constructor
-//
-Profile::Profile(const Profile & from) :
-		ProfileName(from.ProfileName),
-		ErrorString(from.ErrorString),
-		ProfileSize(from.ProfileSize),
-		TagCount(from.TagCount),
-		vcgtIndex(from.vcgtIndex),
-		wcsProfileIndex(from.wcsProfileIndex),
-		WCS_ColorDeviceModel(from.WCS_ColorDeviceModel),
-		WCS_ColorAppearanceModel(from.WCS_ColorAppearanceModel),
-		WCS_GamutMapModel(from.WCS_GamutMapModel)
-{
-	if (from.ProfileHeader) {
-		ProfileHeader = new PROFILEHEADER;
-		memcpy_s(ProfileHeader, sizeof(PROFILEHEADER), from.ProfileHeader, sizeof(PROFILEHEADER));
-	} else {
-		ProfileHeader = 0;
-	}
-	if (from.TagTable) {
-		TagTable = new TAG_TABLE_ENTRY[TagCount];
-		memcpy_s(TagTable, TagCount * sizeof(TAG_TABLE_ENTRY), from.TagTable, TagCount * sizeof(TAG_TABLE_ENTRY));
-	} else {
-		TagTable = 0;
-	}
-	if (from.pVCGT && TagTable) {
-		pVCGT = reinterpret_cast<VCGT_HEADER *>(new BYTE[TagTable[vcgtIndex].Size]);
-		memcpy_s(pVCGT, TagTable[vcgtIndex].Size, from.pVCGT, TagTable[vcgtIndex].Size);
-	} else {
-		pVCGT = 0;
-	}
-}
-
-// Assignment operator
-//
-Profile & Profile::operator = (const Profile & from) {
-
-	ProfileName = from.ProfileName;
-	ErrorString = from.ErrorString;
-	ProfileSize = from.ProfileSize;
-	TagCount = from.TagCount;
-	vcgtIndex = from.vcgtIndex;
-	wcsProfileIndex = from.wcsProfileIndex;
-	WCS_ColorDeviceModel = from.WCS_ColorDeviceModel;
-	WCS_ColorAppearanceModel = from.WCS_ColorAppearanceModel;
-	WCS_GamutMapModel = from.WCS_GamutMapModel;
-	if (ProfileHeader) {
-		delete [] ProfileHeader;
-	}
-	if (from.ProfileHeader) {
-		ProfileHeader = new PROFILEHEADER;
-		memcpy_s(ProfileHeader, sizeof(PROFILEHEADER), from.ProfileHeader, sizeof(PROFILEHEADER));
-	} else {
-		ProfileHeader = 0;
-	}
-	if (TagTable) {
-		delete [] TagTable;
-	}
-	if (from.TagTable) {
-		TagTable = new TAG_TABLE_ENTRY[TagCount];
-		memcpy_s(TagTable, TagCount * sizeof(TAG_TABLE_ENTRY), from.TagTable, TagCount * sizeof(TAG_TABLE_ENTRY));
-	} else {
-		TagTable = 0;
-	}
-	if (pVCGT) {
-		delete [] pVCGT;
-	}
-	if (from.pVCGT && TagTable) {
-		pVCGT = reinterpret_cast<VCGT_HEADER *>(new BYTE[TagTable[vcgtIndex].Size]);
-		memcpy_s(pVCGT, TagTable[vcgtIndex].Size, from.pVCGT, TagTable[vcgtIndex].Size);
-	} else {
-		pVCGT = 0;
-	}
-	return *this;
+	SecureZeroMemory(&vcgtHeader, sizeof(vcgtHeader));
 }
 
 // Destructor
 //
 Profile::~Profile() {
+	if (pLUT) {
+		delete [] pLUT;
+	}
 	if (pVCGT) {
 		delete [] pVCGT;
 	}
@@ -125,10 +160,64 @@ Profile::~Profile() {
 	}
 }
 
-// Set profile name
+#if 0
+// Initialize
 //
-void Profile::SetName(const wchar_t * profileName) {
-	ProfileName = profileName;
+void Profile::Initialize(void) {
+}
+#endif
+
+// AddRef
+//
+void Profile::AddRef(void) {
+	++RefCount;
+}
+
+#if 0
+// Delete
+//
+void Profile::Delete(void) {
+	--RefCount;
+	if ( 0 == RefCount ) {
+		delete this;
+	}
+}
+#endif
+
+// Vector of profiles
+//
+static vector <Profile *> profileList;
+
+// Add a profile to the list if it isn't already on it -- if it is already on the list,
+// bump up the reference count, delete the profile we were passed, and return a
+// pointer to the one we found on the list.
+//
+Profile * Profile::Add(Profile * profile) {
+	size_t index = profileList.size();
+	for (size_t i = 0; i < index; ++i) {
+		if ( profile->ProfileName == profileList[i]->ProfileName ) {
+			profileList[i]->AddRef();
+			delete profile;
+			return profileList[i];
+		}
+	}
+	profile->Index = static_cast<int>(index);
+	profileList.push_back(profile);
+	return profile;
+}
+
+// Clear the list of profiles
+//
+void Profile::ClearList(bool freeAllMemory) {
+	size_t count = profileList.size();
+	for (size_t i = 0; i < count; ++i) {
+		delete profileList[i];
+	}
+	profileList.clear();
+	if ( freeAllMemory && (profileList.capacity() > 0) ) {
+		vector <Profile *> dummy;
+		profileList.swap(dummy);
+	}
 }
 
 // Get profile name
@@ -137,184 +226,18 @@ wstring Profile::GetName(void) const {
 	return ProfileName;
 }
 
-// Load profile info from disk
+// Get profile's LUT pointer (may be zero)
 //
-wstring Profile::Load(void) {
-
-	wstring s;
-
-	// Quit early if no profile
-	//
-	if (ProfileName.empty()) {
-		return s;
-	}
-
-	wchar_t filepath[1024];
-	DWORD filepathSize = sizeof(filepath);
-	BOOL bRet = GetColorDirectoryW(NULL, filepath, &filepathSize);
-	if (bRet) {
-		StringCbCat(filepath, sizeof(filepath), L"\\");
-		StringCbCat(filepath, sizeof(filepath), ProfileName.c_str());
-
-		HANDLE hFile = CreateFileW(
-				filepath,
-				GENERIC_READ,
-				FILE_SHARE_READ,
-				NULL,
-				OPEN_EXISTING, 
-				0,
-				NULL
-		);
-		if (INVALID_HANDLE_VALUE != hFile) {
-			bRet = GetFileSizeEx(hFile, &ProfileSize);
-			if (bRet) {
-				ProfileHeader = new PROFILEHEADER;
-				DWORD cb;
-				bRet = ReadFile(hFile, ProfileHeader, sizeof(PROFILEHEADER), &cb, NULL);
-				if (bRet) {
-					ProfileHeader->phSize = swap32(ProfileHeader->phSize);
-					ProfileHeader->phClass = swap32(ProfileHeader->phClass);
-					bRet = ReadFile(hFile, &TagCount, sizeof(TagCount), &cb, NULL);
-					if (bRet) {
-						TagCount = swap32(TagCount);
-						TagTable = new TAG_TABLE_ENTRY[TagCount];
-
-						// This useless variable 'dw' is here to work around a "/analyze" bug that produced this warning:
-						// "warning C6029: Possible buffer overrun in call to 'ReadFile': use of unchecked value 'this'"
-						// The alternative is "#pragma warning(disable:6029)" which also suppresses the bogus warning
-						//
-						DWORD dw = TagCount * sizeof(TAG_TABLE_ENTRY);
-						bRet = ReadFile(hFile, TagTable, dw, &cb, NULL);
-						if (bRet) {
-							for (size_t i = 0; i < TagCount; i++) {
-								TagTable[i].Offset = swap32(TagTable[i].Offset);
-								TagTable[i].Size = swap32(TagTable[i].Size);
-								if ('tgcv' == TagTable[i].Signature) {
-									vcgtIndex = static_cast<int>(i);
-								}
-								if ('00SM' == TagTable[i].Signature) {
-									wcsProfileIndex = static_cast<int>(i);
-								}
-							}
-							LARGE_INTEGER moveTo;
-							if (-1 != vcgtIndex) {
-								moveTo.LowPart = TagTable[vcgtIndex].Offset;
-								moveTo.HighPart = 0;
-								bRet = SetFilePointerEx(hFile, moveTo, NULL, FILE_BEGIN);
-								if (bRet) {
-									pVCGT = reinterpret_cast<VCGT_HEADER *>(new BYTE[TagTable[vcgtIndex].Size]);
-									bRet = ReadFile(hFile, pVCGT, TagTable[vcgtIndex].Size, &cb, NULL);
-									if (bRet) {
-										pVCGT->vcgtType = static_cast<VCGT_TYPE>(swap32(pVCGT->vcgtType));
-										if (VCGT_TYPE_TABLE == pVCGT->vcgtType) {
-											pVCGT->vcgtContents.t.vcgtChannels = swap16(pVCGT->vcgtContents.t.vcgtChannels);
-											pVCGT->vcgtContents.t.vcgtCount = swap16(pVCGT->vcgtContents.t.vcgtCount);
-											pVCGT->vcgtContents.t.vcgtItemSize = swap16(pVCGT->vcgtContents.t.vcgtItemSize);
-										} else {
-											pVCGT->vcgtContents.f.vcgtRedGamma = swap32(pVCGT->vcgtContents.f.vcgtRedGamma);
-											pVCGT->vcgtContents.f.vcgtRedMin = swap32(pVCGT->vcgtContents.f.vcgtRedMin);
-											pVCGT->vcgtContents.f.vcgtRedMax = swap32(pVCGT->vcgtContents.f.vcgtRedMax);
-
-											pVCGT->vcgtContents.f.vcgtGreenGamma = swap32(pVCGT->vcgtContents.f.vcgtGreenGamma);
-											pVCGT->vcgtContents.f.vcgtGreenMin = swap32(pVCGT->vcgtContents.f.vcgtGreenMin);
-											pVCGT->vcgtContents.f.vcgtGreenMax = swap32(pVCGT->vcgtContents.f.vcgtGreenMax);
-
-											pVCGT->vcgtContents.f.vcgtBlueGamma = swap32(pVCGT->vcgtContents.f.vcgtBlueGamma);
-											pVCGT->vcgtContents.f.vcgtBlueMin = swap32(pVCGT->vcgtContents.f.vcgtBlueMin);
-											pVCGT->vcgtContents.f.vcgtBlueMax = swap32(pVCGT->vcgtContents.f.vcgtBlueMax);
-										}
-									} else {
-										s += ShowError(L"ReadFile");
-									}
-								} else {
-									s += ShowError(L"SetFilePointerEx");
-								}
-							}
-
-							if (-1 != wcsProfileIndex) {
-								moveTo.LowPart = TagTable[wcsProfileIndex].Offset;
-								moveTo.HighPart = 0;
-								bRet = SetFilePointerEx(hFile, moveTo, NULL, FILE_BEGIN);
-								if (bRet) {
-									BYTE * bigBuffer = new BYTE[TagTable[wcsProfileIndex].Size];
-
-#pragma warning(push)
-#pragma warning(disable:6011)	// warning C6011: Dereferencing NULL pointer 'TagTable': Lines: 78, 82, 86, ..., 173, 174, 175
-
-									bRet = ReadFile(hFile, bigBuffer, TagTable[wcsProfileIndex].Size, &cb, NULL);
-#pragma warning(pop)
-
-									if (bRet) {
-										WCS_IN_ICC_HEADER * wiPtr = reinterpret_cast<WCS_IN_ICC_HEADER *>(bigBuffer);
-										DWORD siz;
-
-										// A WCS profile embedded in an ICC profile is a set of three little-endian Unicode (UCS2)
-										// XML "files" strung together, with a header that says how to find individual sections.
-										// The three sections are:
-										//   1) Color Device Model;
-										//   2) Color Appearance Model;
-										//   3) Gamut Map Model
-										//
-										wchar_t * cString;
-
-										siz = swap32(wiPtr->wcshdrCDMsize) / 2;
-										cString = new wchar_t[siz + 1];
-										memcpy_s(cString, 2 * siz + sizeof(wchar_t), &bigBuffer[swap32(wiPtr->wcshdrCDMoffset)], 2 * siz + sizeof(wchar_t));
-										cString[siz] = 0;
-										WCS_ColorDeviceModel = cString;
-										delete [] cString;
-
-										siz = swap32(wiPtr->wcshdrCAMsize) / 2;
-										cString = new wchar_t[siz + 1];
-										memcpy_s(cString, 2 * siz + sizeof(wchar_t), &bigBuffer[swap32(wiPtr->wcshdrCAMoffset)], 2 * siz + sizeof(wchar_t));
-										cString[siz] = 0;
-										WCS_ColorAppearanceModel = cString;
-										delete [] cString;
-
-										siz = swap32(wiPtr->wcshdrGMMsize) / 2;
-										cString = new wchar_t[siz + 1];
-										memcpy_s(cString, 2 * siz + sizeof(wchar_t), &bigBuffer[swap32(wiPtr->wcshdrGMMoffset)], 2 * siz + sizeof(wchar_t));
-										cString[siz] = 0;
-										WCS_GamutMapModel = cString;
-										delete [] cString;
-
-									} else {
-										s += ShowError(L"ReadFile");
-									}
-									delete [] bigBuffer;
-								} else {
-									s += ShowError(L"SetFilePointerEx");
-								}
-							}
-						} else {
-							s += ShowError(L"ReadFile");
-						}
-					} else {
-						s += ShowError(L"ReadFile");
-					}
-				} else {
-					s += ShowError(L"ReadFile");
-				}
-			} else {
-				s += ShowError(L"GetFileSizeEx");
-			}
-			CloseHandle(hFile);
-		} else {
-			s += ShowError(L"CreateFile");
-		}
-	} else {
-		s += ShowError(L"GetColorDirectory");
-	}
-	ErrorString = s;
-	return s;
+LUT * Profile::GetLUT(void) const {
+	return pLUT;
 }
 
-// Return a profile filename (no path) from the registry
+// Return a list of all profiles associated with a given registry key, indicating the 'default' profile from the list
 //
-wchar_t * Profile::FindProfileName(HKEY hKeyBase, const wchar_t * registryKey, bool * perUser) {
+Profile * Profile::GetAllProfiles(HKEY hKeyBase, const wchar_t * registryKey, bool * perUser, ProfileList & pList) {
 	HKEY hKey;
-	wchar_t * profileName = 0;
 	int len = 0;
+	Profile * profile = 0;
 	if (ERROR_SUCCESS == RegOpenKeyEx(hKeyBase, registryKey, 0, KEY_QUERY_VALUE, &hKey)) {
 		DWORD dataSize;
 
@@ -322,25 +245,21 @@ wchar_t * Profile::FindProfileName(HKEY hKeyBase, const wchar_t * registryKey, b
 		//
 		if (ERROR_SUCCESS == RegQueryValueEx(hKey, L"ICMProfile", NULL, NULL, NULL, &dataSize)) {
 			dataSize += sizeof(wchar_t);
-			void * profileListBase = malloc(dataSize);
+			BYTE * profileListBase = reinterpret_cast<BYTE *>(malloc(dataSize));
 			if (profileListBase) {
-				wchar_t * profileList = (wchar_t *)profileListBase;
-				memset(profileList, 0, dataSize);
-				RegQueryValueEx(hKey, L"ICMProfile", NULL, NULL, (LPBYTE)profileList, &dataSize);
+				memset(profileListBase, 0, dataSize);
+				RegQueryValueEx(hKey, L"ICMProfile", NULL, NULL, profileListBase, &dataSize);
 
-				if (*profileList) {
-					wchar_t * profilePtr = 0;
+				wchar_t * profileListPtr = reinterpret_cast<wchar_t *>(profileListBase);
+				if (*profileListPtr) {
 
 					// Find the last profile in the list
 					//
-					while (*profileList) {
-						profilePtr = profileList;
-						len = 1 + lstrlenW(profileList);
-						profileList += len;
-					}
-					profileName = (wchar_t *)malloc(sizeof(wchar_t) * len);
-					if (profileName) {
-						wcscpy_s(profileName, len, profilePtr);
+					while (*profileListPtr) {
+						profile = Add(new Profile(profileListPtr));
+						pList.push_back(profile);
+						len = 1 + lstrlenW(profileListPtr);
+						profileListPtr += len;
 					}
 				}
 				free(profileListBase);
@@ -354,19 +273,549 @@ wchar_t * Profile::FindProfileName(HKEY hKeyBase, const wchar_t * registryKey, b
 			DWORD dataType;
 			if (ERROR_SUCCESS == RegQueryValueEx(hKey, L"UsePerUserProfiles", NULL, &dataType, NULL, &dataSize)) {
 				if ( (REG_DWORD == dataType) && (sizeof(data) == dataSize) ) {
-					RegQueryValueEx(hKey, L"UsePerUserProfiles", NULL, NULL, (LPBYTE)&data, &dataSize);
+					RegQueryValueEx(hKey, L"UsePerUserProfiles", NULL, NULL, reinterpret_cast<BYTE *>(&data), &dataSize);
 				}
 			}
 			*perUser = (1 == data);
 		}
 		RegCloseKey(hKey);
 	}
-	return profileName;
+	return profile;
+}
+
+// Load profile info from disk
+//
+wstring Profile::Load(bool forceReload) {
+
+	wstring s;
+	wchar_t buf[1024];
+
+	// Quit early if no profile
+	//
+	if (ProfileName.empty()) {
+		return s;
+	}
+
+	// Don't load twice unless requested to do so
+	//
+	if (loaded && !forceReload) {
+		return ErrorString;
+	}
+
+	// If we got this far, we'll set the 'loaded' flag ... its purpose is to
+	// prevent duplicate work, not as a 'success' indication
+	//
+	loaded = true;
+
+	// Also, if this is not the first time here (i.e. 'forceReload' is true),
+	// then we need to clean up from prior passes ... releasing memory, for example
+	//
+	if (forceReload) {
+		ErrorString.clear();
+		ValidationFailures.clear();
+		ProfileSize.QuadPart = 0;
+		if (ProfileHeader) {
+			delete [] ProfileHeader;
+			ProfileHeader = 0;
+		}
+		TagCount = 0;
+		if (TagTable) {
+			delete [] TagTable;
+			TagTable = 0;
+		}
+		vcgtIndex = -1;
+		if (pVCGT) {
+			delete [] pVCGT;
+			pVCGT = 0;
+		}
+		SecureZeroMemory(&vcgtHeader, sizeof(VCGT_HEADER));
+		if (pLUT) {
+			delete [] pLUT;
+			pLUT = 0;
+		}
+		wcsProfileIndex = -1;
+		WCS_ColorDeviceModel.clear();
+		WCS_ColorAppearanceModel.clear();
+		WCS_GamutMapModel.clear();
+	}
+
+	// Get color directory
+	//
+	wchar_t filepath[1024];
+	if (ColorDirectory) {
+		StringCbCopy(filepath, sizeof(filepath), ColorDirectory);
+	} else {
+		ErrorString = ColorDirectoryErrorString;
+		return ErrorString;
+	}
+
+	// Open the profile file
+	//
+	StringCbCat(filepath, sizeof(filepath), L"\\");
+	StringCbCat(filepath, sizeof(filepath), ProfileName.c_str());
+
+	//StringCbCopy(filepath, sizeof(filepath), L"C:\\DeleteMe\\DeleteMe.txt");
+
+	HANDLE hFile = CreateFileW(
+			filepath,
+			GENERIC_READ,
+			FILE_SHARE_READ,
+			NULL,
+			OPEN_EXISTING, 
+			0,
+			NULL
+	);
+	if (INVALID_HANDLE_VALUE == hFile) {
+		wstring message = L"Cannot open profile file \"";
+		message += filepath;
+		message += L"\".\r\n";
+		ErrorString += ShowError(L"CreateFile", message.c_str());
+		return ErrorString;
+	}
+
+	// Get file size
+	//
+	BOOL bRet = GetFileSizeEx(hFile, &ProfileSize);
+	if (0 == bRet) {
+		wstring message = L"Cannot determine the size of profile file \"";
+		message += filepath;
+		message += L"\".\r\n";
+		ErrorString += ShowError(L"GetFileSizeEx", message.c_str());
+		CloseHandle(hFile);
+		return ErrorString;
+	}
+
+	// Make sure that the file size is acceptable
+	//
+	if ( ProfileSize.QuadPart < (sizeof(PROFILEHEADER) + sizeof(TagCount)) ) {
+		wstring message = L"File \"";
+		message += filepath;
+		message += L"\" is not a valid profile file.\r\nThe file size (";
+		StringCbPrintf(
+				buf,
+				sizeof(buf),
+				L"%I64u bytes) is less than the size of the required profile header with tag count (132 bytes).\r\n",
+				ProfileSize );
+		message += buf;
+		ErrorString = message;
+		CloseHandle(hFile);
+		return ErrorString;
+	}
+
+	// Read the profile header
+	//
+	ProfileHeader = new PROFILEHEADER;
+	SecureZeroMemory(ProfileHeader, sizeof(PROFILEHEADER));
+	DWORD cb = 0;
+	bRet = ReadFile(hFile, ProfileHeader, sizeof(PROFILEHEADER), &cb, NULL);
+	if ( 0 == bRet ) {
+		wstring message = L"Cannot read header of profile file \"";
+		message += filepath;
+		message += L"\".\r\n";
+		ErrorString += ShowError(L"ReadFile", message.c_str());
+		CloseHandle(hFile);
+		return ErrorString;
+	}
+	if ( cb != sizeof(PROFILEHEADER) ) {
+		wstring message = L"Cannot read header of profile file \"";
+		message += filepath;
+		StringCbPrintf(
+				buf,
+				sizeof(buf),
+				L"\".\r\nOnly %u bytes were read.  The required profile header is 128 bytes.\r\n",
+				cb );
+		message += buf;
+		ErrorString = message;
+		CloseHandle(hFile);
+		return ErrorString;
+	}
+
+	// We have read 128 bytes of profile header, now validate it
+	//
+	DWORD profileClaimedSize = swap32(ProfileHeader->phSize);
+	if ( ProfileSize.LowPart != profileClaimedSize ) {
+		ValidationFailures += L"Profile size on disk does not match size stored in file.\r\n";
+		StringCbPrintf(
+				buf,
+				sizeof(buf),
+				L"Disk size is %u bytes, but the profile's header says it is %u bytes.\r\n\r\n",
+				ProfileSize.LowPart,
+				profileClaimedSize );
+		ValidationFailures += buf;
+	}
+
+	// We could do more validation if there is a reason to do it here ...
+
+	// Read the tag count
+	//
+	DWORD testTagCount = 0;
+	bRet = ReadFile(hFile, &testTagCount, sizeof(testTagCount), &cb, NULL);
+	if ( (0 == bRet) || (cb != sizeof(testTagCount) ) ) {
+		wstring message = L"Cannot read tag count from profile file \"";
+		message += filepath;
+		message += L"\".\r\n";
+		ErrorString += ShowError(L"ReadFile", message.c_str());
+		CloseHandle(hFile);
+		return ErrorString;
+	}
+
+	// Do a little sanity checking on the proposed tag count.  Be generous.
+	//
+	testTagCount = swap32(testTagCount);
+	if (testTagCount > 1024) {
+		wstring message = L"Tag count in profile file \"";
+		message += filepath;
+		StringCbPrintf(
+				buf,
+				sizeof(buf),
+				L"\" is unreasonably large (%u).\r\nThis is probably not a valid profile.\r\n",
+				testTagCount );
+		message += buf;
+		ErrorString = message;
+		CloseHandle(hFile);
+		return ErrorString;
+	}
+	DWORD smallestPossibleSize = (testTagCount * sizeof(TAG_TABLE_ENTRY)) + sizeof(PROFILEHEADER) + sizeof(TagCount) + sizeof(DWORD);
+	if ( smallestPossibleSize > ProfileSize.LowPart ) {
+		wstring message = L"File \"";
+		message += filepath;
+		message += L"\" is not a valid profile file.\r\nThe tag count (";
+		StringCbPrintf(
+				buf,
+				sizeof(buf),
+				L"%u) specifies a minimum file size (%u) that exceeds the actual file size (%u).\r\n",
+				testTagCount,
+				smallestPossibleSize,
+				ProfileSize.LowPart );
+		message += buf;
+		ErrorString = message;
+		CloseHandle(hFile);
+		return ErrorString;
+	}
+
+	// The tag count seems reasonable, so read the tag table (directory)
+	//
+	TagCount = testTagCount;
+	TagTable = new TAG_TABLE_ENTRY[TagCount];
+	DWORD tagTableByteCount = TagCount * sizeof(TAG_TABLE_ENTRY);
+	SecureZeroMemory(TagTable, tagTableByteCount);
+	bRet = ReadFile(hFile, TagTable, tagTableByteCount, &cb, NULL);
+	if ( (0 == bRet) || (cb != tagTableByteCount ) ) {
+		wstring message = L"Cannot read tag table (directory) from profile file \"";
+		message += filepath;
+		message += L"\".\r\n";
+		ErrorString += ShowError(L"ReadFile", message.c_str());
+		CloseHandle(hFile);
+		return ErrorString;
+	}
+
+	// Store our version in little-endian format
+	//
+	for (size_t i = 0; i < TagCount; i++) {
+		TagTable[i].Signature = swap32(TagTable[i].Signature);
+		TagTable[i].Offset = swap32(TagTable[i].Offset);
+		TagTable[i].Size = swap32(TagTable[i].Size);
+
+		// Sanity test every tag table entry
+		//
+		unsigned __int64 testSize = TagTable[i].Offset + TagTable[i].Size;
+		if ( testSize > static_cast<unsigned __int64>(ProfileSize.QuadPart) ) {
+			wstring message = L"File \"";
+			message += filepath;
+			message += L"\" is not a valid profile file.\r\nThe tag '";
+			BYTE * pb = reinterpret_cast<BYTE *>(&TagTable[i].Signature);
+			StringCbPrintf(
+					buf,
+					sizeof(buf),
+					L"%C%C%C%C' specifies an offset (%u) and size (%u) that exceed the actual file size (%u).\r\n",
+					pb[3], pb[2], pb[1], pb[0],
+					TagTable[i].Offset,
+					TagTable[i].Size,
+					ProfileSize.LowPart );
+			message += buf;
+			ErrorString = message;
+			CloseHandle(hFile);
+			return ErrorString;
+		}
+		if ('vcgt' == TagTable[i].Signature) {
+			vcgtIndex = static_cast<int>(i);
+		}
+		if ('MS00' == TagTable[i].Signature) {
+			wcsProfileIndex = static_cast<int>(i);
+		}
+	}
+
+	// If there is a 'vcgt' tag, read it
+	//
+	LARGE_INTEGER moveTo;
+	if (-1 != vcgtIndex) {
+		moveTo.LowPart = TagTable[vcgtIndex].Offset;
+		moveTo.HighPart = 0;
+		bRet = SetFilePointerEx(hFile, moveTo, NULL, FILE_BEGIN);
+		if ( 0 == bRet ) {
+			wstring message = L"Cannot read 'vcgt' tag from profile file \"";
+			message += filepath;
+			message += L"\".\r\n";
+			ErrorString += ShowError(L"SetFilePointerEx", message.c_str());
+			CloseHandle(hFile);
+			return ErrorString;
+		}
+		pVCGT = reinterpret_cast<VCGT_HEADER *>(new BYTE[TagTable[vcgtIndex].Size]);
+		bRet = ReadFile(hFile, pVCGT, TagTable[vcgtIndex].Size, &cb, NULL);
+		if ( 0 == bRet ) {
+			wstring message = L"Cannot read 'vcgt' tag from profile file \"";
+			message += filepath;
+			message += L"\".\r\n";
+			ErrorString += ShowError(L"ReadFile", message.c_str());
+			CloseHandle(hFile);
+			return ErrorString;
+		}
+		vcgtHeader.vcgtSignature = swap32(pVCGT->vcgtSignature);
+		vcgtHeader.vcgtReserved = swap32(pVCGT->vcgtReserved);
+		vcgtHeader.vcgtType = static_cast<VCGT_TYPE>(swap32(pVCGT->vcgtType));
+		if (VCGT_TYPE_TABLE == vcgtHeader.vcgtType) {
+			vcgtHeader.vcgtContents.t.vcgtChannels = swap16(pVCGT->vcgtContents.t.vcgtChannels);
+			vcgtHeader.vcgtContents.t.vcgtCount = swap16(pVCGT->vcgtContents.t.vcgtCount);
+			vcgtHeader.vcgtContents.t.vcgtItemSize = swap16(pVCGT->vcgtContents.t.vcgtItemSize);
+
+			// Sanity test the vcgt table size
+			//
+			if (3 != vcgtHeader.vcgtContents.t.vcgtChannels) {
+				wstring message = L"File \"";
+				message += filepath;
+				message += L"\" is not a valid profile file.\r\nThe 'vcgt' table header indicates a color table using ";
+				StringCbPrintf(
+						buf,
+						sizeof(buf),
+						L"%u channels.  Color displays use 3 channels.\r\n",
+						vcgtHeader.vcgtContents.t.vcgtChannels );
+				message += buf;
+				ErrorString = message;
+				CloseHandle(hFile);
+				return ErrorString;
+			}
+			if (256 != vcgtHeader.vcgtContents.t.vcgtCount) {
+				wstring message = L"File \"";
+				message += filepath;
+				message += L"\" is not a valid profile file.\r\nThe 'vcgt' table header indicates a color table using ";
+				StringCbPrintf(
+						buf,
+						sizeof(buf),
+						L"%u entries per channel.  The Windows API requires 256 entries per channel.\r\n",
+						vcgtHeader.vcgtContents.t.vcgtCount );
+				message += buf;
+				ErrorString = message;
+				CloseHandle(hFile);
+				return ErrorString;
+			}
+			if ( (2 != vcgtHeader.vcgtContents.t.vcgtItemSize) && (1 != vcgtHeader.vcgtContents.t.vcgtItemSize) ) {
+				wstring message = L"File \"";
+				message += filepath;
+				message += L"\" is not a valid profile file.\r\nThe 'vcgt' table header indicates a color table using ";
+				StringCbPrintf(
+						buf,
+						sizeof(buf),
+						L"%u bytes per entry.\r\nValid color tables must have either 1 or 2 bytes per entry.\r\n",
+						vcgtHeader.vcgtContents.t.vcgtItemSize );
+				message += buf;
+				ErrorString = message;
+				CloseHandle(hFile);
+				return ErrorString;
+			}
+			DWORD testSize = vcgtHeader.vcgtContents.t.vcgtChannels *
+							vcgtHeader.vcgtContents.t.vcgtCount *
+							vcgtHeader.vcgtContents.t.vcgtItemSize + 12;
+			if ( testSize > TagTable[vcgtIndex].Size ) {
+				wstring message = L"File \"";
+				message += filepath;
+				message += L"\" is not a valid profile file.\r\nThe 'vcgt' data indicates a color table size (";
+				StringCbPrintf(
+						buf,
+						sizeof(buf),
+						L"%u) that exceeds the size of the 'vcgt' tag (%u).\r\n",
+						testSize,
+						TagTable[vcgtIndex].Size );
+				message += buf;
+				ErrorString = message;
+				CloseHandle(hFile);
+				return ErrorString;
+			}
+
+			// Ok, this is sort of questionable.  But ...
+			//
+			// Adobe Gamma ("Adobe Gamma.cpl") version 3.3.0.0 (at least, perhaps other versions) writes profiles
+			// that contain badly formed 'vcgt' tags.  What they do is create a normal 2 byte-per-entry table
+			// (using only the high byte, but that's OK), and then label it as a 1 byte-per-entry table.  Presumably,
+			// "Adobe Gamma Loader.exe" (version 1.0.0.1) is "smart" enough to deal with this, but what about the
+			// rest of us?
+			//
+			// So ... I'll try to detect this (bad) situation and "do the right thing".  If the 'vcgt' seems to be
+			// mislabeled (double its suggested size, with every other entry zero), then I'll load it as the 2 byte-
+			// per-entry table it really is.  Sigh ...
+			//
+
+			// Start out assuming that the header is correct ... tables that say they are
+			// 1 byte-per-entry really are.
+			//
+			bool treatAsTwoByteTable = (2 == vcgtHeader.vcgtContents.t.vcgtItemSize);
+
+			if ( !treatAsTwoByteTable ) {
+
+				// Detect bad Adobe Gamma-style 'vcgt' table.  Is the size on disk twice what it needs to be?
+				//
+				DWORD testSize2 = vcgtHeader.vcgtContents.t.vcgtChannels * vcgtHeader.vcgtContents.t.vcgtCount * 2 + 12;
+				if ( testSize2 <= TagTable[vcgtIndex].Size ) {
+
+					// Yes, there is room in the 'vcgt' for a 2 byte-per-entry table.  Is every other entry zero?
+					//
+					bool foundNonZero = false;
+					LUT * testLUT = reinterpret_cast<LUT *>(&pVCGT->vcgtContents.t.vcgtData[0]);
+					for (size_t i = 0; i < 256; ++i) {
+						if ( 0 != (testLUT->red[i] & 0xFF00) ) {
+							foundNonZero = true;
+							break;
+						}
+						if ( 0 != (testLUT->green[i] & 0xFF00) ) {
+							foundNonZero = true;
+							break;
+						}
+						if ( 0 != (testLUT->blue[i] & 0xFF00) ) {
+							foundNonZero = true;
+							break;
+						}
+					}
+					if ( false == foundNonZero ) {
+
+						// We have a winner!  This is really a 2 byte table mislabeled as a 1 byte table.
+						//
+						treatAsTwoByteTable = true;
+						ValidationFailures += L"The 'vcgt' tag in this profile is badly formed.  The 'vcgt' table header\r\n";
+						ValidationFailures += L"indicates that the color table uses 1 byte per entry, but in fact the table\r\n";
+						ValidationFailures += L"is a 2 byte per entry table.  The table was loaded accounting for this error\r\n";
+						ValidationFailures += L"and should behave correctly as loaded by this program.  This profile may cause\r\n";
+						ValidationFailures += L"problems if its color table is loaded by other LUT loaders.\r\n\r\n";
+					}
+				}
+			}
+
+			// Create a byte-swapped copy of the profile's LUT
+			//
+			pLUT = new LUT;
+			SecureZeroMemory(pLUT, sizeof(LUT));
+			if (treatAsTwoByteTable) {
+
+				// This is the normal case, matching LUT formats except for byte order
+				//
+				LUT * profileLUT = reinterpret_cast<LUT *>(&pVCGT->vcgtContents.t.vcgtData[0]);
+				for (size_t i = 0; i < 256; ++i) {
+					pLUT->red[i] = swap16(profileLUT->red[i]);
+					pLUT->green[i] = swap16(profileLUT->green[i]);
+					pLUT->blue[i] = swap16(profileLUT->blue[i]);
+				}
+			} else {
+
+				// This is the odd case, where we create a 2-byte LUT entry from a 1-byte entry.  We could either
+				//  just stuff the byte into the high-order byte (e.g. 0x56 => 0x5600) or we could distribute
+				//  the values better by putting the byte into both halves (e.g. 0x56 => 0x5656).
+				//
+				LUT_1_BYTE * profileLUT = reinterpret_cast<LUT_1_BYTE *>(&pVCGT->vcgtContents.t.vcgtData[0]);
+				for (size_t i = 0; i < 256; ++i) {
+
+#define USE_BOTH_HALVES 1
+#if USE_BOTH_HALVES
+					pLUT->red[i] = (static_cast<WORD>(profileLUT->red[i]) << 8) + profileLUT->red[i];
+					pLUT->green[i] = (static_cast<WORD>(profileLUT->green[i]) << 8) + profileLUT->green[i];
+					pLUT->blue[i] = (static_cast<WORD>(profileLUT->blue[i]) << 8) + profileLUT->blue[i];
+#else
+					pLUT->red[i] = (static_cast<WORD>(profileLUT->red[i]) << 8);
+					pLUT->green[i] = (static_cast<WORD>(profileLUT->green[i]) << 8);
+					pLUT->blue[i] = (static_cast<WORD>(profileLUT->blue[i]) << 8);
+#endif
+
+				}
+			}
+		} else {
+			vcgtHeader.vcgtContents.f.vcgtRedGamma = swap32(pVCGT->vcgtContents.f.vcgtRedGamma);
+			vcgtHeader.vcgtContents.f.vcgtRedMin = swap32(pVCGT->vcgtContents.f.vcgtRedMin);
+			vcgtHeader.vcgtContents.f.vcgtRedMax = swap32(pVCGT->vcgtContents.f.vcgtRedMax);
+
+			vcgtHeader.vcgtContents.f.vcgtGreenGamma = swap32(pVCGT->vcgtContents.f.vcgtGreenGamma);
+			vcgtHeader.vcgtContents.f.vcgtGreenMin = swap32(pVCGT->vcgtContents.f.vcgtGreenMin);
+			vcgtHeader.vcgtContents.f.vcgtGreenMax = swap32(pVCGT->vcgtContents.f.vcgtGreenMax);
+
+			vcgtHeader.vcgtContents.f.vcgtBlueGamma = swap32(pVCGT->vcgtContents.f.vcgtBlueGamma);
+			vcgtHeader.vcgtContents.f.vcgtBlueMin = swap32(pVCGT->vcgtContents.f.vcgtBlueMin);
+			vcgtHeader.vcgtContents.f.vcgtBlueMax = swap32(pVCGT->vcgtContents.f.vcgtBlueMax);
+		}
+	}
+
+	if (-1 != wcsProfileIndex) {
+		moveTo.LowPart = TagTable[wcsProfileIndex].Offset;
+		moveTo.HighPart = 0;
+		bRet = SetFilePointerEx(hFile, moveTo, NULL, FILE_BEGIN);
+		if ( 0 == bRet ) {
+			wstring message = L"Cannot read 'MS00' tag from profile file \"";
+			message += filepath;
+			message += L"\".\r\n";
+			ErrorString += ShowError(L"SetFilePointerEx", message.c_str());
+			CloseHandle(hFile);
+			return ErrorString;
+		}
+		BYTE * bigBuffer = new BYTE[TagTable[wcsProfileIndex].Size];
+
+//#pragma warning(push)
+//#pragma warning(disable:6011)	// warning C6011: Dereferencing NULL pointer 'TagTable': Lines: 78, 82, 86, ..., 173, 174, 175
+
+		bRet = ReadFile(hFile, bigBuffer, TagTable[wcsProfileIndex].Size, &cb, NULL);
+//#pragma warning(pop)
+
+		if (bRet) {
+			WCS_IN_ICC_HEADER * wiPtr = reinterpret_cast<WCS_IN_ICC_HEADER *>(bigBuffer);
+			DWORD siz;
+
+			// A WCS profile embedded in an ICC profile is a set of three little-endian Unicode (UCS2)
+			// XML "files" strung together, with a header that says how to find individual sections.
+			// The three sections are:
+			//   1) Color Device Model;
+			//   2) Color Appearance Model;
+			//   3) Gamut Map Model
+			//
+			wchar_t * cString;
+
+			siz = swap32(wiPtr->wcshdrCDMsize) / 2;
+			cString = new wchar_t[siz + 1];
+			memcpy_s(cString, 2 * siz + sizeof(wchar_t), &bigBuffer[swap32(wiPtr->wcshdrCDMoffset)], 2 * siz + sizeof(wchar_t));
+			cString[siz] = 0;
+			WCS_ColorDeviceModel = cString;
+			delete [] cString;
+
+			siz = swap32(wiPtr->wcshdrCAMsize) / 2;
+			cString = new wchar_t[siz + 1];
+			memcpy_s(cString, 2 * siz + sizeof(wchar_t), &bigBuffer[swap32(wiPtr->wcshdrCAMoffset)], 2 * siz + sizeof(wchar_t));
+			cString[siz] = 0;
+			WCS_ColorAppearanceModel = cString;
+			delete [] cString;
+
+			siz = swap32(wiPtr->wcshdrGMMsize) / 2;
+			cString = new wchar_t[siz + 1];
+			memcpy_s(cString, 2 * siz + sizeof(wchar_t), &bigBuffer[swap32(wiPtr->wcshdrGMMoffset)], 2 * siz + sizeof(wchar_t));
+			cString[siz] = 0;
+			WCS_GamutMapModel = cString;
+			delete [] cString;
+
+		} else {
+			s += ShowError(L"ReadFile");
+		}
+		delete [] bigBuffer;
+	}
+	CloseHandle(hFile);
+	ErrorString = s;
+	return s;
 }
 
 // Return a string for the per-monitor panel
 //
-wstring Profile::DetailsString(void) const {
+wstring Profile::DetailsString(void) {
 
 	wstring s;
 
@@ -377,129 +826,314 @@ wstring Profile::DetailsString(void) const {
 		return s;
 	}
 
-	// We should have loaded the profile earlier, so if we didn't, then there was an error
+	// If we already failed to load the profile, report the error we had.
+	// If we haven't yet read the profile, try to do it now.
+	// If it fails, report the error.
 	//
+	if ( !ErrorString.empty() ) {
+		return ErrorString;
+	}
 	if ( 0 == ProfileSize.QuadPart ) {
-		s = ErrorString;
-		return s;
+		Load(false);
+		if ( !ErrorString.empty() ) {
+			return ErrorString;
+		}
 	}
 
 	s.reserve(10240);					// Reduce repeated reallocation
 	wchar_t buf[1024];
+	BYTE * pb = 0;
+	const wchar_t * lookupString = 0;
+
+	// Get color directory
+	//
 	wchar_t filepath[1024];
-	DWORD filepathSize = sizeof(filepath);
-	BOOL bRet = GetColorDirectoryW(NULL, filepath, &filepathSize);
-	if (bRet) {
-		StringCbCat(filepath, sizeof(filepath), L"\\");
-		StringCbCat(filepath, sizeof(filepath), ProfileName.c_str());
-		s += L"Active profile: '";
-		s += filepath;
-		StringCbPrintf(buf, sizeof(buf), L"', %I64u bytes\r\n", ProfileSize);
-		s += buf;
-		StringCbPrintf(buf, sizeof(buf), L"Profile length = %d bytes\r\n", ProfileHeader->phSize);
-		s += buf;
-		BYTE * pb = reinterpret_cast<BYTE *>(&ProfileHeader->phVersion);
-		StringCbPrintf(buf, sizeof(buf), L"Profile version = %d.%d.%d\r\n", pb[0], (pb[1]>>4), (pb[1]&0x0F));
-		s += buf;
-		StringCbPrintf(buf, sizeof(buf), L"Profile class is %s\r\n", (CLASS_MONITOR == ProfileHeader->phClass) ? L"Monitor" : L"not Monitor");
-		s += buf;
-		StringCbPrintf(buf, sizeof(buf), L"\r\nProfile header (%d bytes):\r\n", sizeof(PROFILEHEADER));
-		s += buf;
-		s += HexDump(reinterpret_cast<unsigned char *>(ProfileHeader), sizeof(PROFILEHEADER), 16);
-		StringCbPrintf(buf, sizeof(buf), L"\r\nProfile contains %d tags:\r\n", TagCount);
-		s += buf;
-		for (size_t i = 0; i < TagCount; i++) {
-			pb = reinterpret_cast<BYTE *>(&TagTable[i].Signature);
-			StringCbPrintf(buf, sizeof(buf), L"'%C%C%C%C'", pb[0], pb[1], pb[2], pb[3]);
-			s += buf;
-			if (i < TagCount - 1) {
-				s += L", ";
-			}
-		}
-		if (-1 == vcgtIndex) {
-			s += L"\r\n\r\nProfile does not include a Video Card Gamma Tag\r\n";
-		} else {
-			s += L"\r\n\r\nProfile includes a Video Card Gamma Tag:\r\n";
-			pb = reinterpret_cast<BYTE *>(&pVCGT->vcgtSignature);
-			StringCbPrintf(buf, sizeof(buf), L"    Signature: '%C%C%C%C'", pb[0], pb[1], pb[2], pb[3]);
-			s += buf;
-			s += L"\r\n    Type: ";
-			if (VCGT_TYPE_TABLE == pVCGT->vcgtType) {
-				s += L"Table";
-				StringCbPrintf(buf, sizeof(buf), L"\r\n    Channels: %d", pVCGT->vcgtContents.t.vcgtChannels);
-				s += buf;
-				StringCbPrintf(buf, sizeof(buf), L"\r\n    Count: %d entries per channel", pVCGT->vcgtContents.t.vcgtCount);
-				s += buf;
-				wchar_t * str;
-				if ( 1 == pVCGT->vcgtContents.t.vcgtItemSize ) {
-					str = L"\r\n    Size: %d byte per entry";
-				} else {
-					str = L"\r\n    Size: %d bytes per entry";
-				}
-				StringCbPrintf(buf, sizeof(buf), str, pVCGT->vcgtContents.t.vcgtItemSize);
-				s += buf;
-			} else {
-				s += L"Formula";
-
-				StringCbPrintf(buf, sizeof(buf), L"\r\n    Red gamma: %6.3f", double(pVCGT->vcgtContents.f.vcgtRedGamma) / double(65536));
-				s += buf;
-				StringCbPrintf(buf, sizeof(buf), L"\r\n    Red min: %6.3f", double(pVCGT->vcgtContents.f.vcgtRedMin) / double(65536));
-				s += buf;
-				StringCbPrintf(buf, sizeof(buf), L"\r\n    Red max: %6.3f", double(pVCGT->vcgtContents.f.vcgtRedMax) / double(65536));
-				s += buf;
-
-				StringCbPrintf(buf, sizeof(buf), L"\r\n    Green gamma: %6.3f", double(pVCGT->vcgtContents.f.vcgtGreenGamma) / double(65536));
-				s += buf;
-				StringCbPrintf(buf, sizeof(buf), L"\r\n    Green min: %6.3f", double(pVCGT->vcgtContents.f.vcgtGreenMin) / double(65536));
-				s += buf;
-				StringCbPrintf(buf, sizeof(buf), L"\r\n    Green max: %6.3f", double(pVCGT->vcgtContents.f.vcgtGreenMax) / double(65536));
-				s += buf;
-
-				StringCbPrintf(buf, sizeof(buf), L"\r\n    Blue gamma: %6.3f", double(pVCGT->vcgtContents.f.vcgtBlueGamma) / double(65536));
-				s += buf;
-				StringCbPrintf(buf, sizeof(buf), L"\r\n    Blue min: %6.3f", double(pVCGT->vcgtContents.f.vcgtBlueMin) / double(65536));
-				s += buf;
-				StringCbPrintf(buf, sizeof(buf), L"\r\n    Blue max: %6.3f", double(pVCGT->vcgtContents.f.vcgtBlueMax) / double(65536));
-				s += buf;
-			}
-			StringCbPrintf(buf, sizeof(buf), L"\r\n\r\nDump of Video Card Gamma Tag (%d bytes):\r\n", TagTable[vcgtIndex].Size);
-			s += buf;
-			s += HexDump(reinterpret_cast<unsigned char *>(pVCGT), TagTable[vcgtIndex].Size, 16);
-		}
-
-		if (-1 != wcsProfileIndex) {
-			s += L"\r\nProfile includes an embedded WCS profile ('MS00'):\r\n";
-
-			//WCS_IN_ICC_HEADER * wiPtr = reinterpret_cast<WCS_IN_ICC_HEADER *>(bigBuffer);
-			//pb = reinterpret_cast<BYTE *>(&wiPtr->wcshdrSignature);
-			//StringCbPrintf(buf, sizeof(buf), L"    Signature: '%C%C%C%C'\r\n", pb[0], pb[1], pb[2], pb[3]);
-			//s += buf;
-			//StringCbPrintf(buf, sizeof(buf), L"\r\nDump of embedded WCS profile header (%d bytes):\r\n", sizeof(WCS_IN_ICC_HEADER));
-			//s += buf;
-			//s += HexDump(reinterpret_cast<unsigned char *>(wiPtr), sizeof(WCS_IN_ICC_HEADER), 16);
-
-			// A WCS profile embedded in an ICC profile is a set of three little-endian Unicode (UCS2)
-			// XML "files" strung together, with a header that says how to find individual sections.
-			// The three sections are:
-			//   1) Color Device Model;
-			//   2) Color Appearance Model;
-			//   3) Gamut Map Model
-			//
-			if (!WCS_ColorDeviceModel.empty()) {
-				s += L"\r\n\t\tColor Device Model:\r\n";
-				s += WCS_ColorDeviceModel;
-			}
-			if (!WCS_ColorAppearanceModel.empty()) {
-				s += L"\r\n\t\tColor Appearance Model:\r\n";
-				s += WCS_ColorAppearanceModel;
-			}
-			if (!WCS_GamutMapModel.empty()) {
-				s += L"\r\n\t\tGamut Map Model:\r\n";
-				s += WCS_GamutMapModel;
-			}
-		}
+	if (ColorDirectory) {
+		StringCbCopy(filepath, sizeof(filepath), ColorDirectory);
 	} else {
-		s += ShowError(L"GetColorDirectory");
+		ErrorString = ColorDirectoryErrorString;
+		return ErrorString;
+	}
+	StringCbCat(filepath, sizeof(filepath), L"\\");
+	StringCbCat(filepath, sizeof(filepath), ProfileName.c_str());
+	s += filepath;
+	StringCbPrintf(buf, sizeof(buf), L"\r\nFile size is %I64u bytes\r\n\r\n", ProfileSize);
+	s += buf;
+
+	// Display validation failures, if any
+	//
+	if ( !ValidationFailures.empty() ) {
+		s += L"There were issues found when loading this profile:\r\n";
+		s += ValidationFailures;
+	}
+
+	// Display the profile header fields
+	//
+	StringCbPrintf(buf, sizeof(buf), L"Profile header fields:\r\n\tSize:\t\t\t\t\t\t\t\t\t\t\t%d bytes\r\n", swap32(ProfileHeader->phSize));
+	s += buf;
+	s += L"\tPreferred CMM:\t\t\t\t\t\t\t\t\t";
+	if ( 0 == ProfileHeader->phCMMType ) {
+		s += L"No preferred CMM\r\n";
+	} else {
+		pb = reinterpret_cast<BYTE *>(&ProfileHeader->phCMMType);
+		StringCbPrintf(buf, sizeof(buf), L"%C%C%C%C", pb[0], pb[1], pb[2], pb[3]);
+		s += buf;
+		lookupString = LookupName( knownCMMs, _countof(knownCMMs), swap32(ProfileHeader->phCMMType) );
+		if ( *lookupString ) {
+			StringCbPrintf(buf, sizeof(buf), L" (%s)\r\n", lookupString);
+			s += buf;
+		} else {
+			s += L"\r\n";
+		}
+	}
+	s += L"\tVersion:\t\t\t\t\t\t\t\t\t\t";
+	if ( 0x00002004 == ProfileHeader->phVersion ) {		// Latest ICC documentation likes "4.2.0.0" instead of "4.2.0"
+		s += L"4.2.0.0\r\n";
+	} else {
+		pb = reinterpret_cast<BYTE *>(&ProfileHeader->phVersion);
+		StringCbPrintf(buf, sizeof(buf), L"%d.%d.%d\r\n", pb[0], (pb[1]>>4), (pb[1]&0x0F));
+		s += buf;
+	}
+	pb = reinterpret_cast<BYTE *>(&ProfileHeader->phClass);
+	StringCbPrintf(buf, sizeof(buf), L"\tProfile/Device class:\t\t\t\t\t\t\t%C%C%C%C", pb[0], pb[1], pb[2], pb[3]);
+	s += buf;
+	lookupString = LookupName( profileClasses, _countof(profileClasses), swap32(ProfileHeader->phClass) );
+	if ( *lookupString ) {
+		StringCbPrintf(buf, sizeof(buf), L" (%s)\r\n", lookupString);
+		s += buf;
+	} else {
+		s += L"\r\n";
+	}
+	pb = reinterpret_cast<BYTE *>(&ProfileHeader->phDataColorSpace);
+	StringCbPrintf(buf, sizeof(buf), L"\tColor space of data:\t\t\t\t\t\t\t%C%C%C%C", pb[0], pb[1], pb[2], pb[3]);
+	s += buf;
+	lookupString = LookupName( colorSpaces, _countof(colorSpaces), swap32(ProfileHeader->phDataColorSpace) );
+	if ( *lookupString ) {
+		StringCbPrintf(buf, sizeof(buf), L" (%s)\r\n", lookupString);
+		s += buf;
+	} else {
+		s += L"\r\n";
+	}
+	pb = reinterpret_cast<BYTE *>(&ProfileHeader->phConnectionSpace);
+	StringCbPrintf(buf, sizeof(buf), L"\tProfile connection space:\t\t\t\t\t\t%C%C%C%C", pb[0], pb[1], pb[2], pb[3]);
+	s += buf;
+	lookupString = LookupName( colorSpaces, _countof(colorSpaces), swap32(ProfileHeader->phConnectionSpace) );
+	if ( *lookupString ) {
+		StringCbPrintf(buf, sizeof(buf), L" (%s)\r\n", lookupString);
+		s += buf;
+	} else {
+		s += L"\r\n";
+	}
+	dateTimeNumber * dt = reinterpret_cast<dateTimeNumber *>(&ProfileHeader->phDateTime[0]);
+	StringCchPrintf(
+		buf,
+		_countof(buf),
+		L"\tDate and time this profile was first created:\t%04d-%02d-%02d %02d:%02d:%02dZ\r\n", // RFC3389, NOTE: in 5.6
+		swap16(dt->year),
+		swap16(dt->month),
+		swap16(dt->day),
+		swap16(dt->hour),
+		swap16(dt->minute),
+		swap16(dt->second) );
+	s += buf;
+	pb = reinterpret_cast<BYTE *>(&ProfileHeader->phSignature);
+	StringCbPrintf(buf, sizeof(buf), L"\tSignature (must be 'acsp'):\t\t\t\t\t\t%C%C%C%C\r\n", pb[0], pb[1], pb[2], pb[3]);
+	s += buf;
+	s += L"\tPrimary Platform signature:\t\t\t\t\t\t";
+	if ( 0 == ProfileHeader->phPlatform ) {
+		s += L"No primary platform\r\n";
+	} else {
+		pb = reinterpret_cast<BYTE *>(&ProfileHeader->phPlatform);
+		StringCbPrintf(buf, sizeof(buf), L"%C%C%C%C", pb[0], pb[1], pb[2], pb[3]);
+		s += buf;
+		lookupString = LookupName( knownPlatforms, _countof(knownPlatforms), swap32(ProfileHeader->phPlatform) );
+		if ( *lookupString ) {
+			StringCbPrintf(buf, sizeof(buf), L" (%s)\r\n", lookupString);
+			s += buf;
+		} else {
+			s += L"\r\n";
+		}
+	}
+	DWORD flags = swap32(ProfileHeader->phProfileFlags);
+	s += L"\tProfile flags:\r\n\t\tEmbedded Profile:\t\t\t\t\t\t\t";
+	s += (0 != (flags & 0x00000001)) ? L"True" : L"False";
+	s += L"\r\n\t\tUse only with embedded color data:\t\t\t";
+	s += (0 != (flags & 0x00000002)) ? L"True" : L"False";
+	s += L"\r\n";
+	if ( 0 != (flags & ~0x00000002) ) {
+		StringCbPrintf(buf, sizeof(buf), L"\t=>\tUndefined flags set:\t\t\t\t\t\t0x%08x\r\n", flags);
+		s += buf;
+	}
+	s += L"\tDevice manufacturer:\t\t\t\t\t\t\t";
+	if ( 0 == ProfileHeader->phManufacturer ) {
+		s += L"No manufacturer specified\r\n";
+	} else {
+		pb = reinterpret_cast<BYTE *>(&ProfileHeader->phManufacturer);
+		StringCbPrintf(buf, sizeof(buf), L"%C%C%C%C\r\n", pb[0], pb[1], pb[2], pb[3]);
+		s += buf;
+	}
+	s += L"\tDevice model:\t\t\t\t\t\t\t\t\t";
+	if ( 0 == ProfileHeader->phModel ) {
+		s += L"No model specified\r\n";
+	} else {
+		pb = reinterpret_cast<BYTE *>(&ProfileHeader->phModel);
+		StringCbPrintf(buf, sizeof(buf), L"%C%C%C%C\r\n", pb[0], pb[1], pb[2], pb[3]);
+		s += buf;
+	}
+	flags = swap32(ProfileHeader->phAttributes[1]);
+	s += L"\tDevice attributes:\r\n\t\tReflective or transparency:\t\t\t\t\t";
+	s += (0 != (flags & 0x00000001)) ? L"Transparency" : L"Reflective";
+	s += L"\r\n\t\tGlossy or matte:\t\t\t\t\t\t\t";
+	s += (0 != (flags & 0x00000002)) ? L"Matte" : L"Glossy";
+	s += L"\r\n\t\tMedia polarity:\t\t\t\t\t\t\t\t";
+	s += (0 != (flags & 0x00000004)) ? L"Negative" : L"Positive";
+	s += L"\r\n\t\tColor or B&W media:\t\t\t\t\t\t\t";
+	s += (0 != (flags & 0x00000008)) ? L"Black & white" : L"Color";
+	s += L"\r\n";
+	if ( (0 != (flags & ~0x0000000F)) || (0 != ProfileHeader->phAttributes[0]) ) {
+		StringCbPrintf(
+				buf,
+				sizeof(buf),
+				L"\t=>\tUndefined flags set:\t\t\t\t\t\t0x%08x%08x\r\n",
+				swap32(ProfileHeader->phAttributes[0]),
+				flags );
+		s += buf;
+	}
+	s += L"\tRendering Intent:\t\t\t\t\t\t\t\t";
+	lookupString = LookupName( renderingIntents, _countof(renderingIntents), swap32(ProfileHeader->phRenderingIntent) );
+	if ( *lookupString ) {
+		StringCbPrintf(buf, sizeof(buf), L"%s\r\n", lookupString);
+		s += buf;
+	} else {
+		StringCbPrintf(buf, sizeof(buf), L"Unknown value: 0x%08x\r\n", swap32(ProfileHeader->phRenderingIntent));
+		s += buf;
+	}
+	StringCbPrintf(
+			buf,
+			sizeof(buf),
+			L"\tIlluminant:\t\t\t\t\t\t\t\t\t\tX=%6.4f, Y=%6.4f, Z=%6.4f\r\n",
+			double(swap32(ProfileHeader->phIlluminant.ciexyzX)) / double(65536),
+			double(swap32(ProfileHeader->phIlluminant.ciexyzY)) / double(65536),
+			double(swap32(ProfileHeader->phIlluminant.ciexyzZ)) / double(65536) );
+	s += buf;
+	s += L"\tProfile Creator:\t\t\t\t\t\t\t\t";
+	if ( 0 == ProfileHeader->phCreator ) {
+		s += L"No creator specified\r\n";
+	} else {
+		pb = reinterpret_cast<BYTE *>(&ProfileHeader->phCreator);
+		StringCbPrintf(buf, sizeof(buf), L"%C%C%C%C\r\n", pb[0], pb[1], pb[2], pb[3]);
+		s += buf;
+	}
+	DWORD * pProfileID = reinterpret_cast<DWORD *>(&ProfileHeader->phCreator);
+	StringCbPrintf(
+			buf,
+			sizeof(buf),
+			L"\tProfile ID:\t\t\t\t\t\t\t\t\t\t%08x %08x %08x %08x\r\n",
+			swap32(pProfileID[1]),
+			swap32(pProfileID[2]),
+			swap32(pProfileID[3]),
+			swap32(pProfileID[4]) );
+	s += buf;
+
+#if 0
+	StringCbPrintf(buf, sizeof(buf), L"\r\nProfile header (%d bytes):\r\n", sizeof(PROFILEHEADER));
+	s += buf;
+	s += HexDump(reinterpret_cast<unsigned char *>(ProfileHeader), sizeof(PROFILEHEADER), 16);
+#endif
+
+	StringCbPrintf(buf, sizeof(buf), L"\r\nProfile contains %d tags:\r\n", TagCount);
+	s += buf;
+	for (size_t i = 0; i < TagCount; i++) {
+		pb = reinterpret_cast<BYTE *>(&TagTable[i].Signature);
+		StringCbPrintf(buf, sizeof(buf), L"'%C%C%C%C'", pb[3], pb[2], pb[1], pb[0]);
+		s += buf;
+		if (i < TagCount - 1) {
+			s += L", ";
+		}
+	}
+	if (-1 == vcgtIndex) {
+		s += L"\r\n\r\nProfile does not include a Video Card Gamma Tag\r\n";
+	} else {
+		s += L"\r\n\r\nProfile includes a Video Card Gamma Tag:\r\n";
+		pb = reinterpret_cast<BYTE *>(&vcgtHeader.vcgtSignature);
+		StringCbPrintf(buf, sizeof(buf), L"    Signature: '%C%C%C%C'", pb[3], pb[2], pb[1], pb[0]);
+		s += buf;
+		s += L"\r\n    Type: ";
+		if (VCGT_TYPE_TABLE == vcgtHeader.vcgtType) {
+			s += L"Table";
+			StringCbPrintf(buf, sizeof(buf), L"\r\n    Channels: %d", vcgtHeader.vcgtContents.t.vcgtChannels);
+			s += buf;
+			StringCbPrintf(buf, sizeof(buf), L"\r\n    Count: %d entries per channel", vcgtHeader.vcgtContents.t.vcgtCount);
+			s += buf;
+			wchar_t * str;
+			if ( 1 == vcgtHeader.vcgtContents.t.vcgtItemSize ) {
+				str = L"\r\n    Size: %d byte per entry";
+			} else {
+				str = L"\r\n    Size: %d bytes per entry";
+			}
+			StringCbPrintf(buf, sizeof(buf), str, vcgtHeader.vcgtContents.t.vcgtItemSize);
+			s += buf;
+		} else {
+			s += L"Formula";
+
+			StringCbPrintf(buf, sizeof(buf), L"\r\n    Red gamma: %6.4f", double(vcgtHeader.vcgtContents.f.vcgtRedGamma) / double(65536));
+			s += buf;
+			StringCbPrintf(buf, sizeof(buf), L"\r\n    Red min: %6.4f", double(vcgtHeader.vcgtContents.f.vcgtRedMin) / double(65536));
+			s += buf;
+			StringCbPrintf(buf, sizeof(buf), L"\r\n    Red max: %6.4f", double(vcgtHeader.vcgtContents.f.vcgtRedMax) / double(65536));
+			s += buf;
+
+			StringCbPrintf(buf, sizeof(buf), L"\r\n    Green gamma: %6.4f", double(vcgtHeader.vcgtContents.f.vcgtGreenGamma) / double(65536));
+			s += buf;
+			StringCbPrintf(buf, sizeof(buf), L"\r\n    Green min: %6.4f", double(vcgtHeader.vcgtContents.f.vcgtGreenMin) / double(65536));
+			s += buf;
+			StringCbPrintf(buf, sizeof(buf), L"\r\n    Green max: %6.4f", double(vcgtHeader.vcgtContents.f.vcgtGreenMax) / double(65536));
+			s += buf;
+
+			StringCbPrintf(buf, sizeof(buf), L"\r\n    Blue gamma: %6.4f", double(vcgtHeader.vcgtContents.f.vcgtBlueGamma) / double(65536));
+			s += buf;
+			StringCbPrintf(buf, sizeof(buf), L"\r\n    Blue min: %6.4f", double(vcgtHeader.vcgtContents.f.vcgtBlueMin) / double(65536));
+			s += buf;
+			StringCbPrintf(buf, sizeof(buf), L"\r\n    Blue max: %6.4f", double(vcgtHeader.vcgtContents.f.vcgtBlueMax) / double(65536));
+			s += buf;
+		}
+#if 0
+		StringCbPrintf(buf, sizeof(buf), L"\r\n\r\nDump of Video Card Gamma Tag (%d bytes):\r\n", TagTable[vcgtIndex].Size);
+		s += buf;
+		s += HexDump(reinterpret_cast<unsigned char *>(pVCGT), TagTable[vcgtIndex].Size, 16);
+#endif
+	}
+
+	if (-1 != wcsProfileIndex) {
+		s += L"\r\nProfile includes an embedded WCS profile ('MS00'):\r\n";
+
+		// A WCS profile embedded in an ICC profile is a set of three little-endian Unicode (UCS2)
+		// XML "files" strung together, with a header that says how to find individual sections.
+		// The three sections are:
+		//   1) Color Device Model;
+		//   2) Color Appearance Model;
+		//   3) Gamut Map Model
+		//
+		if (!WCS_ColorDeviceModel.empty()) {
+			s += L"\r\n\t\tColor Device Model:\r\n";
+			s += WCS_ColorDeviceModel;
+		}
+		if (!WCS_ColorAppearanceModel.empty()) {
+			s += L"\r\n\t\tColor Appearance Model:\r\n";
+			s += WCS_ColorAppearanceModel;
+		}
+		if (!WCS_GamutMapModel.empty()) {
+			s += L"\r\n\t\tGamut Map Model:\r\n";
+			s += WCS_GamutMapModel;
+		}
 	}
 	return s;
+}
+
+LUT_COMPARISON Profile::CompareLUT(LUT * otherLUT) {
+
+	if (!otherLUT) {
+		return LC_ERROR_NO_LUT_PROVIDED;
+	}
+	return LC_PROFILE_HAS_NO_LUT_OTHER_NONLINEAR;
 }

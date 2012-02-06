@@ -355,11 +355,23 @@
 				>
 			</File>
 			<File
+				RelativePath=".\LUTview.cpp"
+				>
+			</File>
+			<File
 				RelativePath=".\Monitor.cpp"
 				>
 			</File>
 			<File
+				RelativePath=".\MonitorPage.cpp"
+				>
+			</File>
+			<File
 				RelativePath=".\Profile.cpp"
+				>
+			</File>
+			<File
+				RelativePath=".\PropertySheet.cpp"
 				>
 			</File>
 			<File
@@ -368,6 +380,10 @@
 			</File>
 			<File
 				RelativePath=".\stdafx.cpp"
+				>
+			</File>
+			<File
+				RelativePath=".\TreeViewItem.cpp"
 				>
 			</File>
 			<File
@@ -385,11 +401,27 @@
 				>
 			</File>
 			<File
+				RelativePath=".\LUT.h"
+				>
+			</File>
+			<File
+				RelativePath=".\LUTview.h"
+				>
+			</File>
+			<File
 				RelativePath=".\Monitor.h"
 				>
 			</File>
 			<File
+				RelativePath=".\MonitorPage.h"
+				>
+			</File>
+			<File
 				RelativePath=".\Profile.h"
+				>
+			</File>
+			<File
+				RelativePath=".\PropertySheet.h"
 				>
 			</File>
 			<File
@@ -402,6 +434,10 @@
 			</File>
 			<File
 				RelativePath=".\stdafx.h"
+				>
+			</File>
+			<File
+				RelativePath=".\TreeViewItem.h"
 				>
 			</File>
 			<File
@@ -423,7 +459,15 @@
 				>
 			</File>
 			<File
+				RelativePath=".\icon1.ico"
+				>
+			</File>
+			<File
 				RelativePath=".\LUTloader.rc"
+				>
+			</File>
+			<File
+				RelativePath=".\setupapi_35.ico"
 				>
 			</File>
 		</Filter>

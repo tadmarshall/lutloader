@@ -1,80 +1,103 @@
-// Monitor.cpp -- Monitor class for handling display monitors returned by EnumDisplayDevices().
+// Monitor.cpp -- Monitor class for handling display monitors returned by EnumDisplayDevices()
 //
 
 #include "stdafx.h"
 #include "Adapter.h"
 #include "Monitor.h"
+#include "Utility.h"
 #include <strsafe.h>
 
 // Constructor
 //
-Monitor::Monitor(int adapterNumber, const DISPLAY_DEVICEW & displayMonitor) :
+Monitor::Monitor(Adapter * hostAdapter, const DISPLAY_DEVICEW & displayMonitor) :
 		DeviceName(displayMonitor.DeviceName),
 		DeviceString(displayMonitor.DeviceString),
 		StateFlags(displayMonitor.StateFlags),
 		DeviceID(displayMonitor.DeviceID),
 		DeviceKey(displayMonitor.DeviceKey),
-		activeProfileIsUserProfile(false),
-		AdapterNumber(adapterNumber)
+		adapter(hostAdapter),
+		pLUT(0),
+		UserProfile(0),
+		SystemProfile(0),
+		activeProfileIsUserProfile(false)
 {
+}
+
+// Destructor
+//
+Monitor::~Monitor() {
+	if (pLUT) {
+		delete [] pLUT;
+	}
+}
+
+// Initialize
+//
+void Monitor::Initialize(void) {
+
+	// Make a copy of the current LUT
+	//
+	HDC hDC = CreateDC(adapter->GetDeviceName().c_str(), 0, 0, 0);
+	if (hDC) {
+		pLUT = new LUT;
+		SecureZeroMemory(pLUT, sizeof(LUT));
+		GetDeviceGammaRamp(hDC, pLUT);
+		DeleteDC(hDC);
+	}
+
+	// Find all associated profiles
+	//
 	wchar_t registryKey[512];
 	int len;
-
-	// See if we are Vista or greater, so we know if per-user monitor profiles are supported
-	//
-	OSVERSIONINFOEX osInfo;
-	SecureZeroMemory(&osInfo, sizeof(osInfo));
-	osInfo.dwOSVersionInfoSize = sizeof(osInfo);
-	GetVersionEx((OSVERSIONINFO *)&osInfo);
-	if (osInfo.dwMajorVersion >= 6) {
+	if (VistaOrHigher()) {
 
 		// Vista or higher, set up user profile, if any
 		//
-		wchar_t * userProfileName;
 		len = lstrlenW(L"\\Registry\\Machine\\System\\CurrentControlSet\\Control\\Class");
 		wcscpy_s(
 			registryKey,
 			_countof(registryKey),
 			L"Software\\Microsoft\\Windows NT\\CurrentVersion\\ICM\\ProfileAssociations\\Display");
-		wcscat_s(registryKey, _countof(registryKey), &displayMonitor.DeviceKey[len]);
-		userProfileName = Profile::FindProfileName(HKEY_CURRENT_USER, registryKey, &activeProfileIsUserProfile);
-		if (userProfileName) {
-			UserProfile.SetName(userProfileName);
-			free(userProfileName);
-			if (activeProfileIsUserProfile) {
-				UserProfile.Load();
-			}
-		}
+		wcscat_s(registryKey, _countof(registryKey), &DeviceKey.c_str()[len]);
+		UserProfile = Profile::GetAllProfiles(HKEY_CURRENT_USER, registryKey, &activeProfileIsUserProfile, UserProfileList);
 	}
 
 	// Set up SystemProfile for any supported OS (this will be the only profile for XP)
 	//
-	wchar_t * systemProfileName;
 	len = lstrlenW(L"\\Registry\\Machine\\");
-	wcscpy_s(registryKey, _countof(registryKey), &displayMonitor.DeviceKey[len]);
-	systemProfileName = Profile::FindProfileName(HKEY_LOCAL_MACHINE, registryKey, 0);
-	if (systemProfileName) {
-		SystemProfile.SetName(systemProfileName);
-		free(systemProfileName);
-		if (!activeProfileIsUserProfile) {
-			SystemProfile.Load();
-		}
+	wcscpy_s(registryKey, _countof(registryKey), &DeviceKey.c_str()[len]);
+	SystemProfile = Profile::GetAllProfiles(HKEY_LOCAL_MACHINE, registryKey, 0, SystemProfileList);
+}
+
+// Vector of monitors
+//
+static vector <Monitor *> monitorList;
+
+// Add a monitor to the end of the list
+//
+Monitor * Monitor::Add(Monitor * monitor) {
+	monitorList.push_back(monitor);
+	return monitor;
+}
+
+// Clear the list of monitors
+//
+void Monitor::ClearList(bool freeAllMemory) {
+	size_t count = monitorList.size();
+	for (size_t i = 0; i < count; ++i) {
+		delete monitorList[i];
+	}
+	monitorList.clear();
+	if ( freeAllMemory && (monitorList.capacity() > 0) ) {
+		vector <Monitor *> dummy;
+		monitorList.swap(dummy);
 	}
 }
 
-// Copy constructor
+// Return 'true' if this monitor is active and part of the desktop
 //
-Monitor::Monitor(const Monitor & from) :
-		DeviceName(from.DeviceName),
-		DeviceString(from.DeviceString),
-		StateFlags(from.StateFlags),
-		DeviceID(from.DeviceID),
-		DeviceKey(from.DeviceKey),
-		UserProfile(from.UserProfile),
-		SystemProfile(from.SystemProfile),
-		activeProfileIsUserProfile(from.activeProfileIsUserProfile),
-		AdapterNumber(from.AdapterNumber)
-{
+bool Monitor::IsActive(const DISPLAY_DEVICEW & displayMonitor) {
+	return (displayMonitor.StateFlags & DISPLAY_DEVICE_ACTIVE) && (displayMonitor.StateFlags & DISPLAY_DEVICE_ATTACHED);
 }
 
 // Return a string for the Summary panel
@@ -82,103 +105,156 @@ Monitor::Monitor(const Monitor & from) :
 wstring Monitor::SummaryString(void) const {
 	wstring s;
 
-	// See if we are Vista or greater, so we know if per-user monitor profiles are supported
-	//
-	OSVERSIONINFOEX osInfo;
-	SecureZeroMemory(&osInfo, sizeof(osInfo));
-	osInfo.dwOSVersionInfoSize = sizeof(osInfo);
-	GetVersionEx(reinterpret_cast<OSVERSIONINFO *>(&osInfo));
-	bool bVistaOrHigher = (osInfo.dwMajorVersion >= 6);
-
 	// Build a display string for this monitor
 	//
 	s += DeviceString;
-	if( Adapter::GetAdapterStateFlags(AdapterNumber) & DISPLAY_DEVICE_PRIMARY_DEVICE ) {			// Note primary monitor
+	if( adapter->GetStateFlags() & DISPLAY_DEVICE_PRIMARY_DEVICE ) {			// Note primary monitor
 		s += L" (primary)";
 	}
-	if (bVistaOrHigher) {
+	if ( VistaOrHigher() ) {
 		s += L"\r\n    User default profile: ";
-		s += UserProfile.GetName();
+		if (UserProfile) {
+			s += UserProfile->GetName();
+		} else {
+			s += L"<No user profiles>";
+		}
 		if (activeProfileIsUserProfile) {
 			s += L" (active)";
 		}
 		s += L"\r\n    System default profile: ";
-		s += SystemProfile.GetName();
+		if (SystemProfile) {
+			s += SystemProfile->GetName();
+		} else {
+			s += L"<No system profiles>";
+		}
 		if (!activeProfileIsUserProfile) {
 			s += L" (active)";
 		}
 	} else {
 		s += L"\r\n    Active profile: ";
-		s += SystemProfile.GetName();
+		if (SystemProfile) {
+			s += SystemProfile->GetName();
+		} else {
+			s += L"<No profiles>";
+		}
+	}
+	s += L"\r\n\r\n";
+
+	// See if the loaded LUT is correct
+	//
+	Profile * active = GetActiveProfile();
+	active->Load(false);
+	switch (active->CompareLUT(pLUT)) {
+
+		// LUTs match word for word
+		//
+		case LC_EQUAL:
+			s += L"The currently loaded LUT matches the active profile exactly\r\n";
+			break;
+
+		// One uses 0x0100, the other uses 0x0101 style
+		//
+		case LC_VARIATION_ON_LINEAR:
+			s += L"The currently loaded LUT and the active profile are both linear but with style differences\r\n";
+			break;
+
+		// Low byte zeroed
+		//
+		case LC_TRUNCATION_IN_LOW_BYTE:
+			s += L"The currently loaded LUT is similar to the active profile but has had the low byte zeroed\r\n";
+			break;
+
+		// Windows 7 rounds to nearest high byte
+		//
+		case LC_ROUNDING_IN_LOW_BYTE:
+			s += L"The currently loaded LUT is similar to the active profile but has been rounded to the nearest multiple of 256\r\n";
+			break;
+
+		// Match, given the circumstances
+		//
+		case LC_PROFILE_HAS_NO_LUT_OTHER_LINEAR:
+			s += L"The currently loaded LUT is linear and the active profile has no LUT\r\n";
+			break;
+
+		// Mismatch, other should be linear
+		//
+		case LC_PROFILE_HAS_NO_LUT_OTHER_NONLINEAR:
+			s += L"The currently loaded LUT is  not linear but it should be because the active profile has no LUT\r\n";
+			break;
+
+		// LUTs do not meet any matching criteria
+		//
+		case LC_UNEQUAL:
+			s += L"The currently loaded LUT does not match the active profile\r\n";
+			break;
+
 	}
 
+#if 0
 	// Display the start of the gamma ramp
 	//
-	HDC hDC = CreateDC(Adapter::GetAdapterDeviceName(AdapterNumber).c_str(), 0, 0, 0);
-	if (hDC) {
-		s += L"\r\n    Gamma ramp =";
-		WORD deviceGammaRamp[3][256];
-		memset(deviceGammaRamp, 0, sizeof(deviceGammaRamp));
-		GetDeviceGammaRamp(hDC, deviceGammaRamp);
-
-		for (int i = 0; i < 3; i++) {
-			for (int j = 0; j < 4; j++) {
-				wchar_t buf[10];
-				StringCbPrintf(buf, sizeof(buf), L" %04X", deviceGammaRamp[i][j]);
-				s += buf;
-			}
-		}
-		DeleteDC(hDC);
+	s += L"    Start of gamma ramp:\r\n  Red   =";
+	for (int i = 0; i < 4; i++) {
+		wchar_t buf[10];
+		StringCbPrintf(buf, sizeof(buf), L" %04X", pLUT->red[i]);
+		s += buf;
 	}
+	s += L"\r\n  Green =";
+	for (int i = 0; i < 4; i++) {
+		wchar_t buf[10];
+		StringCbPrintf(buf, sizeof(buf), L" %04X", pLUT->green[i]);
+		s += buf;
+	}
+	s += L"\r\n  Blue  =";
+	for (int i = 0; i < 4; i++) {
+		wchar_t buf[10];
+		StringCbPrintf(buf, sizeof(buf), L" %04X", pLUT->blue[i]);
+		s += buf;
+	}
+#endif
 	return s;
 }
 
 // Return a string for the per-monitor panel (Profile.cpp does all the work)
 //
 wstring Monitor::DetailsString(void) const {
-	return activeProfileIsUserProfile ? UserProfile.DetailsString() : SystemProfile.DetailsString();
+	return activeProfileIsUserProfile ? UserProfile->DetailsString() : SystemProfile->DetailsString();
 }
 
-// Return 'true' if this monitor is active and part of the desktop
-//
-bool Monitor::IsMonitorActive(const DISPLAY_DEVICEW & displayMonitor) {
-	return (displayMonitor.StateFlags & DISPLAY_DEVICE_ACTIVE) && (displayMonitor.StateFlags & DISPLAY_DEVICE_ATTACHED);
+bool Monitor::GetActiveProfileIsUserProfile(void) const {
+	return activeProfileIsUserProfile;
 }
 
-// Vector of monitors
-//
-static vector <Monitor> monitorList;
-
-// Clear the list of monitors
-//
-void Monitor::ClearMonitorList(bool freeAllMemory) {
-	monitorList.clear();
-	if ( freeAllMemory && (monitorList.capacity() > 0) ) {
-		vector <Monitor> dummy;
-		monitorList.swap(dummy);
-	}
+Profile * Monitor::GetActiveProfile(void) const {
+	return activeProfileIsUserProfile ? UserProfile : SystemProfile;
 }
 
-// Add a monitor to the end of the list
-//
-void Monitor::AddMonitor(const Monitor & monitor) {
-	monitorList.push_back(monitor);
+Profile * Monitor::GetDefaultUserProfile(void) const {
+	return UserProfile;
 }
 
-// Return the size of the monitor list
-//
-size_t Monitor::GetMonitorListSize(void) {
+Profile * Monitor::GetDefaultSystemProfile(void) const {
+	return SystemProfile;
+}
+
+ProfileList & Monitor::GetProfileList(bool userProfiles) {
+	return userProfiles ? UserProfileList : SystemProfileList;
+}
+
+wstring Monitor::GetDeviceString(void) const {
+	return DeviceString;
+}
+
+LUT * Monitor::GetLUT(void) const {
+	return pLUT;
+}
+
+size_t Monitor::GetListSize(void) {
 	return monitorList.size();
 }
 
 // Fetch a reference to a monitor by index number
 //
-Monitor & Monitor::GetMonitor(size_t monitorNumber) {
-	return monitorList[monitorNumber];
-}
-
-// Fetch a monitor's DeviceString by index number
-//
-wstring Monitor::GetMonitorDeviceString(size_t monitorNumber) {
-	return monitorList[monitorNumber].DeviceString;
+Monitor * Monitor::Get(size_t index) {
+	return monitorList[index];
 }

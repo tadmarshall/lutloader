@@ -14,12 +14,24 @@ Resize::Resize(HWND parent) :
 {
 }
 
-// Static (private) globals
+// Vector of Resize objects
 //
 static vector <Resize> resizeList;
+
+// Vector of anchor presets
+//
 static vector <ANCHOR_PRESET> achorPresetList;
-static HWND topWindow;
-static SIZE previousTopWindowSize;
+
+// Top window in our tree (the PropertySheet's main window)
+//
+static HWND topWindow = 0;
+
+// The size of the top window the last time its size changed
+//
+static SIZE previousTopWindowSize = {0};
+
+// We need to rebuild the list of child windows on the next resize
+//
 static bool needRebuild = false;
 
 // Get the parent window for a Resize object
@@ -52,7 +64,7 @@ void Resize::AddAchorPreset(const ANCHOR_PRESET & anchorPreset) {
 	achorPresetList.push_back(anchorPreset);
 }
 
-// Callback proc for EnumChildWindows
+// Callback procedure for EnumChildWindows
 //
 BOOL CALLBACK EnumChildCallback(HWND hwnd, LPARAM lParam) {
 	UNREFERENCED_PARAMETER(lParam);
@@ -190,17 +202,17 @@ void Resize::MainWindowHasResized(const WINDOWPOS & windowPos) {
 		for (vector<RESIZECHILD>::iterator cl = it->childList.begin(); hdwp && !err && (cl != it->childList.end()); ++cl) {
 			RESIZECHILD * rc = &(*cl);
 			hdwp = DeferWindowPos( hdwp, rc->hwnd, 0,
-					rc->rect.left,
-					rc->rect.top,
+					rc->rect.left + ( (rc->anchorRight && !rc->anchorLeft) ? parentSizeDelta.cx : 0 ),
+					rc->rect.top  + ( (rc->anchorBottom && !rc->anchorTop) ? parentSizeDelta.cy : 0 ),
 					rc->rect.right - rc->rect.left + ( (rc->anchorLeft && rc->anchorRight) ? parentSizeDelta.cx : 0 ),
 					rc->rect.bottom - rc->rect.top + ( (rc->anchorTop && rc->anchorBottom) ? parentSizeDelta.cy : 0 ),
 					SWP_NOACTIVATE | SWP_NOCOPYBITS | SWP_NOOWNERZORDER | SWP_NOREDRAW | SWP_NOZORDER );
 			err = GetLastError();
 			if (!err) {
-				//rc->rect.left += ( (rc->anchorRight && !rc->anchorLeft) ? parentSizeDelta.cx : 0 );
-				//rc->rect.top  += ( (rc->anchorBottom && !rc->anchorTop) ? parentSizeDelta.cy : 0 );
-				rc->rect.right  += (rc->anchorLeft && rc->anchorRight) ? parentSizeDelta.cx : 0 ;
-				rc->rect.bottom += (rc->anchorTop && rc->anchorBottom) ? parentSizeDelta.cy : 0 ;
+				rc->rect.left += ( (rc->anchorRight && !rc->anchorLeft) ? parentSizeDelta.cx : 0 );
+				rc->rect.top  += ( (rc->anchorBottom && !rc->anchorTop) ? parentSizeDelta.cy : 0 );
+				rc->rect.right  += rc->anchorRight  ? parentSizeDelta.cx : 0 ;
+				rc->rect.bottom += rc->anchorBottom ? parentSizeDelta.cy : 0 ;
 			}
 			InvalidateRect(rc->hwnd, NULL, TRUE);
 		}
@@ -208,9 +220,9 @@ void Resize::MainWindowHasResized(const WINDOWPOS & windowPos) {
 			BOOL retVal = EndDeferWindowPos(hdwp);
 			err = GetLastError();
 			if ( err || (0 == retVal) ) {
-				extern HINSTANCE g_hInst;
 				wstring s = ShowError(L"EndDeferWindowPos");
 				wchar_t errorMessageCaption[256];
+				extern HINSTANCE g_hInst;
 				LoadString(g_hInst, IDS_ERROR, errorMessageCaption, _countof(errorMessageCaption));
 				MessageBox(NULL, s.c_str(), errorMessageCaption, MB_ICONINFORMATION | MB_OK);
 			}

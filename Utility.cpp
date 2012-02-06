@@ -40,14 +40,45 @@ wstring HexDump(const LPBYTE data, size_t size, size_t rowWidth) {
 
 // Return a string showing failure of the last system call
 //
-wstring ShowError(const wchar_t * functionName) {
+wstring ShowError(const wchar_t * functionName, const wchar_t * preMessageText, const wchar_t * postMessageText) {
 	wstring s;
 	wchar_t buf[1024];
 	DWORD err = GetLastError();
+	if (preMessageText) {
+		s += preMessageText;
+	}
 	StringCbPrintf(buf, sizeof(buf), L"%s failed (0x%x): ", functionName, err);
 	s += buf;
 	FormatMessageW(FORMAT_MESSAGE_FROM_SYSTEM, 0, err, 0, buf, _countof(buf), NULL);
 	s += buf;
-	s += L"\r\n";
+	if (postMessageText) {
+		s += postMessageText;
+	}
 	return s;
+}
+
+// Return 'true' if the OS we are running on is major version 6 or higher
+//
+bool VistaOrHigher(void) {
+
+	OSVERSIONINFOEX osInfo;
+	SecureZeroMemory(&osInfo, sizeof(osInfo));
+	osInfo.dwOSVersionInfoSize = sizeof(osInfo);
+	GetVersionEx(reinterpret_cast<OSVERSIONINFO *>(&osInfo));
+	return (osInfo.dwMajorVersion >= 6);
+}
+
+// Lookup a name in a table -- should perhaps be rewritten to use some 'std' thing
+//
+const wchar_t * LookupName(
+	const __in __ecount(tableSize) NAME_LOOKUP * nameTable,
+	DWORD tableSize,
+	DWORD identifier
+) {
+	for ( DWORD i = 0; i < tableSize; ++i ) {
+		if ( nameTable[i].identifier == identifier ) {
+			return nameTable[i].displayName;
+		}
+	}
+	return L"";
 }

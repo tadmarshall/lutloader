@@ -1,4 +1,4 @@
-// Adapter.cpp -- Adapter class for handling display adapters returned by EnumDisplayDevices().
+// Adapter.cpp -- Adapter class for handling display adapters returned by EnumDisplayDevices()
 //
 
 #include "stdafx.h"
@@ -12,49 +12,54 @@ Adapter::Adapter(const DISPLAY_DEVICEW & displayAdapter) :
 		StateFlags(displayAdapter.StateFlags),
 		DeviceID(displayAdapter.DeviceID),
 		DeviceKey(displayAdapter.DeviceKey)
-
-		//DeviceName(displayAdapter->DeviceName),
-		//DeviceString(displayAdapter->DeviceString),
-		//StateFlags(displayAdapter->StateFlags),
-		//DeviceID(displayAdapter->DeviceID),
-		//DeviceKey(displayAdapter->DeviceKey)
 {
-}
-
-// Return 'true' if this adapter is active and part of the desktop
-//
-bool Adapter::IsAdapterActive(const DISPLAY_DEVICEW * displayAdapter) {
-	return (displayAdapter->StateFlags & DISPLAY_DEVICE_ATTACHED_TO_DESKTOP);
 }
 
 // Vector of adapters
 //
-static vector <Adapter> adapterList;
+static vector <Adapter *> adapterList;
+
+// Add an adapter to the end of the list
+//
+Adapter * Adapter::Add(Adapter * adapter) {
+	adapterList.push_back(adapter);
+	return adapter;
+}
 
 // Clear the list of adapters
 //
-void Adapter::ClearAdapterList(bool freeAllMemory) {
+void Adapter::ClearList(bool freeAllMemory) {
+	size_t count = adapterList.size();
+	for (size_t i = 0; i < count; ++i) {
+		delete adapterList[i];
+	}
 	adapterList.clear();
 	if ( freeAllMemory && (adapterList.capacity() > 0) ) {
-		vector <Adapter> dummy;
+		vector <Adapter *> dummy;
 		adapterList.swap(dummy);
 	}
 }
 
-// Add an adapter to the end of the list
+// Return 'true' if this adapter is active and part of the desktop
 //
-void Adapter::AddAdapter(const Adapter & adapter) {
-	adapterList.push_back(adapter);
+bool Adapter::IsActive(const DISPLAY_DEVICEW * displayAdapter) {
+	return (displayAdapter->StateFlags & DISPLAY_DEVICE_ATTACHED_TO_DESKTOP);
 }
 
-// Fetch an adapter's StateFlags by index number
+// Return the size of the adapter list
 //
-DWORD Adapter::GetAdapterStateFlags(int adapterNumber) {
-	return adapterList[adapterNumber].StateFlags;
+size_t Adapter::GetListSize(void) {
+	return adapterList.size();
 }
 
-// Fetch an adapter's DeviceName by index number
+// Fetch an adapter's StateFlags
 //
-wstring Adapter::GetAdapterDeviceName(int adapterNumber) {
-	return adapterList[adapterNumber].DeviceName;
+DWORD Adapter::GetStateFlags(void) {
+	return StateFlags;
+}
+
+// Fetch an adapter's DeviceName
+//
+wstring Adapter::GetDeviceName(void) {
+	return DeviceName;
 }

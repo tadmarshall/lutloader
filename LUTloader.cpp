@@ -3,27 +3,46 @@
 //
 
 #include "stdafx.h"
-#include <commctrl.h>
 #include "Adapter.h"
+#include "LUTview.h"
 #include "Monitor.h"
-#include "Utility.h"
+#include "PropertySheet.h"
 #include "Resize.h"
+#include "TreeViewItem.h"
+#include "Utility.h"
 #include "resource.h"
 #include <strsafe.h>
-
-#include <commctrl.h>
-//#include <winuser.h>
-//#include <prsht.h>
+#include <wingdi.h>
 
 #pragma comment(lib, "mscms.lib")
 
-// Globals
+// Global externs defined in this file
 //
-HINSTANCE g_hInst = 0;					// Instance handle
+extern HINSTANCE g_hInst = 0;						// Instance handle
+extern wchar_t * ColorDirectory = 0;				// The string returned by GetColorDirectory()
+extern wchar_t * ColorDirectoryErrorString = 0;		// The error message for when GetColorDirectory() fails
 
 // Try for visual styles, if available
 //
 #pragma comment(linker,"\"/manifestdependency:type='win32' name='Microsoft.Windows.Common-Controls' version='6.0.0.0' processorArchitecture='*' publicKeyToken='6595b64144ccf1df' language='*'\"")
+
+// Find the directory for profiles (usually "C:\Windows\system32\spool\drivers\color")
+//
+void FetchColorDirectory(void) {
+	wchar_t filepath[1024];
+	DWORD filepathSize = sizeof(filepath);
+	SetLastError(0);
+	BOOL bRet = GetColorDirectoryW(NULL, filepath, &filepathSize);
+	if (bRet) {
+		ColorDirectory = new wchar_t[filepathSize];
+		StringCchCopy(ColorDirectory, filepathSize, filepath);
+	} else {
+		wstring s = ShowError(L"GetColorDirectoryW", L"Cannot get name of directory for profile files\r\n");
+		size_t len = 1 + s.size();
+		ColorDirectoryErrorString = new wchar_t[len];
+		StringCchCopy(ColorDirectoryErrorString, len, s.c_str());
+	}
+}
 
 // Build lists of adapters and monitors
 //
@@ -31,8 +50,8 @@ void FetchMonitorInfo(void) {
 
 	// Start with empty lists
 	//
-	Monitor::ClearMonitorList(false);
-	Adapter::ClearAdapterList(false);
+	Monitor::ClearList(false);
+	Adapter::ClearList(false);
 
 	// Loop through all display adapters
 	//
@@ -41,10 +60,8 @@ void FetchMonitorInfo(void) {
 	displayAdapter.cb = sizeof(displayAdapter);
 	int iAdapterNum = 0;
 	while ( EnumDisplayDevices(NULL, iAdapterNum, &displayAdapter, 0) ) {
-		if ( Adapter::IsAdapterActive(&displayAdapter) ) {
-			Adapter * adapter = new Adapter(displayAdapter);
-			Adapter::AddAdapter(*adapter);
-			delete adapter;
+		if ( Adapter::IsActive(&displayAdapter) ) {
+			Adapter * adapter = Adapter::Add(new Adapter(displayAdapter));
 
 			// Loop through all monitors on this display adapter
 			//
@@ -53,10 +70,9 @@ void FetchMonitorInfo(void) {
 			displayMonitor.cb = sizeof(displayMonitor);
 			int iMonitorNum = 0;
 			while ( EnumDisplayDevices(displayAdapter.DeviceName, iMonitorNum, &displayMonitor, 0) ) {
-				if ( Monitor::IsMonitorActive(displayMonitor) ) {
-					Monitor * monitor = new Monitor(iAdapterNum, displayMonitor);
-					Monitor::AddMonitor(*monitor);
-					delete monitor;
+				if ( Monitor::IsActive(displayMonitor) ) {
+					Monitor * monitor = Monitor::Add(new Monitor(adapter, displayMonitor));
+					monitor->Initialize();
 				}
 				++iMonitorNum;
 			}
@@ -69,10 +85,6 @@ void FetchMonitorInfo(void) {
 //
 int LoadLUTs(void) {
 
-	// Build lists of adapters and monitors
-	//
-	FetchMonitorInfo();
-
 	// TODO -- for now, just show a message box
 	//
 	wchar_t szCaption[256];
@@ -81,491 +93,8 @@ int LoadLUTs(void) {
 	return 0;
 }
 
-static WNDPROC oldPropSheetWindowProc = 0;
-static SIZE minimumWindowSize = {0};
-
-// Subclass procedure for the main PropertySheet
+// Program entry point
 //
-INT_PTR CALLBACK PropSheetSubclassProc(HWND hWnd, UINT uMessage, WPARAM wParam, LPARAM lParam) {
-
-	switch (uMessage) {
-
-		// Notice changes in window size
-		//
-		case WM_WINDOWPOSCHANGING:
-			WINDOWPOS * pWindowPos;
-			pWindowPos = reinterpret_cast<WINDOWPOS *>(lParam);
-			if ( 0 == (pWindowPos->flags & SWP_NOSIZE) && Resize::GetNeedRebuild() ) {
-				Resize::SetupForResizing(hWnd);
-				Resize::SetNeedRebuild(false);
-			}
-			return CallWindowProc(oldPropSheetWindowProc, hWnd, uMessage, wParam, lParam);
-			break;
-
-		// Notice changes in window size
-		//
-		case WM_WINDOWPOSCHANGED:
-			pWindowPos = reinterpret_cast<WINDOWPOS *>(lParam);
-			if ( 0 == (pWindowPos->flags & SWP_NOSIZE) ) {
-				Resize::MainWindowHasResized(*pWindowPos);
-			}
-			return CallWindowProc(oldPropSheetWindowProc, hWnd, uMessage, wParam, lParam);
-			break;
-
-		// Disallow resizing to smaller than the original size
-		//
-		case WM_GETMINMAXINFO:
-			if ( 0 != minimumWindowSize.cx ) {
-				MINMAXINFO * pMINMAXINFO;
-				pMINMAXINFO = reinterpret_cast<MINMAXINFO *>(lParam);
-				pMINMAXINFO->ptMinTrackSize.x = minimumWindowSize.cx;
-				pMINMAXINFO->ptMinTrackSize.y = minimumWindowSize.cy;
-				return 0;
-			}
-			break;
-
-		default:
-			break;
-	}
-	return CallWindowProc(oldPropSheetWindowProc, hWnd, uMessage, wParam, lParam);
-}
-
-// PropertySheet callback routine
-//
-int CALLBACK PropSheetCallback(HWND hWnd, UINT uMsg, LPARAM lParam) {
-	UNREFERENCED_PARAMETER(hWnd);
-
-	switch(uMsg) {
-
-		case PSCB_PRECREATE:
-
-			// Change the PropertySheet's window styles
-			//
-			LPDLGTEMPLATE lpTemplate;
-			lpTemplate = reinterpret_cast<LPDLGTEMPLATE>(lParam);
-			lpTemplate->style |= (WS_THICKFRAME | WS_MINIMIZEBOX | WS_MAXIMIZEBOX);
-			break;
-
-		case PSCB_INITIALIZED:
-
-			// Add the SysTabControl32 control to the anchor list
-			//
-			HWND tabControl;
-			tabControl = FindWindowEx(hWnd, NULL, L"SysTabControl32", NULL);
-			if (tabControl) {
-				ANCHOR_PRESET anchorPreset;
-				anchorPreset.hwnd = tabControl;
-				anchorPreset.anchorLeft = true;
-				anchorPreset.anchorTop = true;
-				anchorPreset.anchorRight = true;
-				anchorPreset.anchorBottom = true;
-				Resize::AddAchorPreset(anchorPreset);
-			}
-
-			// Subclass the property sheet
-			//
-			oldPropSheetWindowProc = (WNDPROC)(INT_PTR)SetWindowLongPtr(hWnd, GWLP_WNDPROC, (__int3264)(LONG_PTR)PropSheetSubclassProc);
-			break;
-	}
-	return 0;
-}
-
-static WNDPROC oldEditWindowProc = 0;
-
-// Subclass procedure for edit control
-//
-INT_PTR CALLBACK EditSubclassProc(HWND hWnd, UINT uMessage, WPARAM wParam, LPARAM lParam) {
-
-	switch (uMessage) {
-
-#if 0
-		// This prevents us from auto-selecting all text when we get the focus
-		//
-		case WM_GETDLGCODE:
-			INT_PTR temp;
-			temp = CallWindowProcW(oldEditWindowProc, hWnd, uMessage, wParam, lParam);
-			return temp & ~DLGC_HASSETSEL;
-			break;
-#endif
-
-		// This enables control-A as a hotkey for Select All
-		//
-		case WM_CHAR:
-			if (1 == wParam) {
-				uMessage = EM_SETSEL;
-				wParam = 0;
-				lParam = -1;
-				return CallWindowProc(oldEditWindowProc, hWnd, uMessage, wParam, lParam);
-			}
-			return CallWindowProc(oldEditWindowProc, hWnd, uMessage, wParam, lParam);
-			break;
-
-		default:
-			break;
-	}
-	return CallWindowProc(oldEditWindowProc, hWnd, uMessage, wParam, lParam);
-}
-
-static HWND hwnd_IDC_ORIGINAL_SIZE = 0;
-static HWND hwnd_IDC_RESIZED = 0;
-
-// Summary page dialog proc
-//
-INT_PTR CALLBACK SummaryPageProc(HWND hWnd, UINT uMessage, WPARAM wParam, LPARAM lParam) {
-
-	UNREFERENCED_PARAMETER(wParam);
-	UNREFERENCED_PARAMETER(lParam);
-
-	switch (uMessage) {
-		case WM_INITDIALOG:
-		{
-			// Subclass the edit control
-			//
-			oldEditWindowProc = (WNDPROC)(INT_PTR)SetWindowLongPtr(GetDlgItem(hWnd, IDC_SUMMARY_TEXT), GWLP_WNDPROC, (__int3264)(LONG_PTR)EditSubclassProc);
-
-			// This page and its subwindows should grow with resizing
-			//
-			ANCHOR_PRESET anchorPreset;
-			anchorPreset.hwnd = hWnd;
-			anchorPreset.anchorLeft = true;
-			anchorPreset.anchorTop = true;
-			anchorPreset.anchorRight = true;
-			anchorPreset.anchorBottom = true;
-			Resize::AddAchorPreset(anchorPreset);
-
-			anchorPreset.hwnd = GetDlgItem(hWnd, IDC_SUMMARY_TEXT);
-			Resize::AddAchorPreset(anchorPreset);
-
-			// These two hidden windows are used to track resizing prior to
-			// other pages being created.  We set IDC_RESIZED to grow in all
-			// dimensions, and set IDC_ORIGINAL_SIZE to not grow at all.
-			// By comparing their sizes, we can fix up the sizes and positions
-			// of newly created controls on other pages.
-			//
-			hwnd_IDC_RESIZED = GetDlgItem(hWnd, IDC_RESIZED);
-			anchorPreset.hwnd = hwnd_IDC_RESIZED;
-			Resize::AddAchorPreset(anchorPreset);
-
-			anchorPreset.anchorLeft = false;
-			anchorPreset.anchorTop = false;
-			anchorPreset.anchorRight = false;
-			anchorPreset.anchorBottom = false;
-			hwnd_IDC_ORIGINAL_SIZE = GetDlgItem(hWnd, IDC_ORIGINAL_SIZE);
-			anchorPreset.hwnd = hwnd_IDC_ORIGINAL_SIZE;
-			Resize::AddAchorPreset(anchorPreset);
-
-			// Tell the resizing system that its window list is out of date
-			//
-			Resize::SetNeedRebuild(true);
-
-			RECT rect;
-			GetWindowRect(GetParent(hWnd), &rect);
-			minimumWindowSize.cx = rect.right - rect.left;
-			minimumWindowSize.cy = rect.bottom - rect.top;
-
-			// Build a display string describing the monitors we found
-			//
-			wstring summaryString;
-			for (size_t i = 0; i < Monitor::GetMonitorListSize(); ++i) {
-				if ( !summaryString.empty() ) {
-					summaryString += L"\r\n\r\n";					// Skip a line between monitors
-				}
-				summaryString += Monitor::GetMonitor(i).SummaryString();
-			}
-			if ( summaryString.empty() ) {
-				wchar_t noMonitorsFound[256];
-				LoadString(g_hInst, IDS_NO_MONITORS_FOUND, noMonitorsFound, _countof(noMonitorsFound));
-				SetDlgItemText(hWnd, IDC_SUMMARY_TEXT, noMonitorsFound);
-			} else {
-				DWORD tabSpacing = 8;
-				SendDlgItemMessage(hWnd, IDC_MONITOR_TEXT, EM_SETTABSTOPS, 1, (LPARAM)&tabSpacing);
-				SetDlgItemText(hWnd, IDC_SUMMARY_TEXT, summaryString.c_str());
-			}
-			break;
-		}
-
-		// These force the page and read-only edit controls to be white (instead of gray)
-		//
-		case WM_CTLCOLORDLG:
-		case WM_CTLCOLORSTATIC:
-			return reinterpret_cast<INT_PTR>(GetStockObject(WHITE_BRUSH));
-			break;
-
-		//case WM_NOTIFY:
-		//	NMHDR * lpnmhdr;
-		//	lpnmhdr = reinterpret_cast<NMHDR *>(lParam);
-		//	switch (lpnmhdr->code) {
-		//		case PSN_APPLY:   //sent when OK or Apply button pressed
-		//			break;
-
-		//		case PSN_RESET:   //sent when Cancel button pressed
-		//			break;
-
-		//		case PSN_SETACTIVE:
-		//			//this will be ignored if the property sheet is not a wizard
-		//			//PropSheet_SetWizButtons(GetParent(hdlg), PSWIZB_NEXT);
-		//			break;
-
-		//		default:
-		//			break;
-		//	}
-		//	break;
-	}
-	return 0;
-}
-
-// Other page dialog proc
-//
-INT_PTR CALLBACK MonitorPageProc(HWND hWnd, UINT uMessage, WPARAM wParam, LPARAM lParam) {
-
-	UNREFERENCED_PARAMETER(wParam);
-
-	switch (uMessage) {
-		case WM_INITDIALOG:
-		{
-			// Subclass the edit control
-			//
-			HWND editControlHwnd = GetDlgItem(hWnd, IDC_MONITOR_TEXT);
-			oldEditWindowProc = (WNDPROC)(INT_PTR)SetWindowLongPtr(editControlHwnd, GWLP_WNDPROC, (__int3264)(LONG_PTR)EditSubclassProc);
-
-			// This page and its subwindows should grow with resizing
-			//
-			ANCHOR_PRESET anchorPreset;
-			anchorPreset.hwnd = hWnd;
-			anchorPreset.anchorLeft = true;
-			anchorPreset.anchorTop = true;
-			anchorPreset.anchorRight = true;
-			anchorPreset.anchorBottom = true;
-			Resize::AddAchorPreset(anchorPreset);
-
-			anchorPreset.hwnd = editControlHwnd;
-			Resize::AddAchorPreset(anchorPreset);
-
-			HWND treeControlHwnd = GetDlgItem(hWnd, IDC_TREE1);
-			anchorPreset.hwnd = treeControlHwnd;
-			anchorPreset.anchorRight = false;
-			Resize::AddAchorPreset(anchorPreset);
-
-			// Fix up the size of the controls in case the Summary tab was resized
-			// before this tab was created.
-			//
-			RECT originalSize;
-			RECT newSize;
-			GetClientRect(hwnd_IDC_ORIGINAL_SIZE, &originalSize);
-			GetClientRect(hwnd_IDC_RESIZED, &newSize);
-			SIZE sizeDelta;
-			sizeDelta.cx = newSize.right - originalSize.right;
-			sizeDelta.cy = newSize.bottom - originalSize.bottom;
-			WINDOWINFO wiParent;
-			SecureZeroMemory(&wiParent, sizeof(wiParent));
-			wiParent.cbSize = sizeof(wiParent);
-			GetWindowInfo(hWnd, &wiParent);
-			RECT rect;
-			GetWindowRect(editControlHwnd, &rect);
-			rect.left -= wiParent.rcClient.left;
-			rect.top -= wiParent.rcClient.top;
-			rect.right -= wiParent.rcClient.left;
-			rect.bottom -= wiParent.rcClient.top;
-			rect.right += sizeDelta.cx;
-			rect.bottom += sizeDelta.cy;
-			MoveWindow(editControlHwnd, rect.left, rect.top, rect.right - rect.left, rect.bottom - rect.top, FALSE);
-			GetWindowRect(treeControlHwnd, &rect);
-			rect.left -= wiParent.rcClient.left;
-			rect.top -= wiParent.rcClient.top;
-			rect.right -= wiParent.rcClient.left;
-			rect.bottom -= wiParent.rcClient.top;
-			//rect.right += sizeDelta.cx;
-			rect.bottom += sizeDelta.cy;
-			MoveWindow(treeControlHwnd, rect.left, rect.top, rect.right - rect.left, rect.bottom - rect.top, FALSE);
-
-			// Tell the resizing system that its window list is out of date
-			//
-			Resize::SetNeedRebuild(true);
-
-			// Build a display string describing this monitor and its profile
-			//
-			wstring s;
-			size_t monitorNumber = ((PROPSHEETPAGE *)lParam)->lParam;
-			s += Monitor::GetMonitor(monitorNumber).SummaryString();
-			s += L"\r\n\r\n";
-			s += Monitor::GetMonitor(monitorNumber).DetailsString();
-			DWORD tabSpacing = 8;
-			SendDlgItemMessage(hWnd, IDC_MONITOR_TEXT, EM_SETTABSTOPS, 1, (LPARAM)&tabSpacing);
-			SetDlgItemText(hWnd, IDC_MONITOR_TEXT, s.c_str());
-
-			// This is where we throw stuff against the TreeView and see what sticks
-			//
-			TVINSERTSTRUCT tvInsertStruct;
-			SecureZeroMemory(&tvInsertStruct, sizeof(tvInsertStruct));
-			tvInsertStruct.hInsertAfter = TVI_ROOT;
-			tvInsertStruct.itemex.mask = TVIF_TEXT;
-			wchar_t buf[1024];
-			StringCbCopy(buf, sizeof(buf), Monitor::GetMonitorDeviceString(monitorNumber).c_str());
-			tvInsertStruct.itemex.pszText = buf;
-			LRESULT tvRoot;
-			tvRoot = SendMessage(treeControlHwnd, TVM_INSERTITEM, 0, (LPARAM)&tvInsertStruct);
-			tvInsertStruct.hParent = (HTREEITEM)tvRoot;
-			tvInsertStruct.hInsertAfter = TVI_LAST;
-			tvInsertStruct.itemex.pszText = L"Added node";
-			tvInsertStruct.itemex.state = TVIS_STATEIMAGEMASK;
-			tvInsertStruct.itemex.stateMask = TVIS_STATEIMAGEMASK;
-			LRESULT tvSubNode;
-			tvSubNode = SendMessage(treeControlHwnd, TVM_INSERTITEM, 0, (LPARAM)&tvInsertStruct);
-			tvInsertStruct.hParent = (HTREEITEM)tvSubNode;
-			tvInsertStruct.itemex.pszText = L"Deeper node";
-			LRESULT tvRet;
-			tvRet = SendMessage(treeControlHwnd, TVM_INSERTITEM, 0, (LPARAM)&tvInsertStruct);
-			tvRet = SendMessage(treeControlHwnd, TVM_EXPAND, TVE_EXPAND, tvRoot);
-			tvRet = SendMessage(treeControlHwnd, TVM_EXPAND, TVE_EXPAND, tvSubNode);
-
-			break;
-		}
-
-		// These force the page and read-only edit controls to be white (instead of gray)
-		//
-		case WM_CTLCOLORDLG:
-		case WM_CTLCOLORSTATIC:
-			return reinterpret_cast<INT_PTR>(GetStockObject(WHITE_BRUSH));
-			break;
-	}
-	return 0;
-}
-
-// Show a property sheet dialog
-//
-int ShowLUTLoaderDialog(void) {
-
-	// Build lists of adapters and monitors
-	//
-	FetchMonitorInfo();
-
-	// Initialize common controls
-	//
-	INITCOMMONCONTROLSEX icce;
-	icce.dwSize = sizeof(icce);
-	icce.dwICC = ICC_WIN95_CLASSES;
-	InitCommonControlsEx(&icce);
-
-	// Set up property sheet
-	//
-	PROPSHEETHEADER psh;
-	PROPSHEETPAGE * pages = NULL;
-	wchar_t (* headers)[128] = NULL;
-	try {
-		size_t pageCount = 1 + Monitor::GetMonitorListSize();
-		pages = new PROPSHEETPAGE[pageCount];
-		headers = (wchar_t (*)[128])new wchar_t[Monitor::GetMonitorListSize() * 128];
-		SecureZeroMemory(&psh, sizeof(psh));
-		SecureZeroMemory(pages, sizeof(PROPSHEETPAGE) * pageCount);
-
-		// Set up the Summary page
-		//
-		pages[0].dwSize = sizeof(pages[0]);
-		pages[0].hInstance = g_hInst;
-		pages[0].pszTemplate = MAKEINTRESOURCE(IDD_SUMMARY_PAGE_2);
-		//pages[0].pszTemplate = MAKEINTRESOURCE(IDD_SUMMARY_PAGE);
-		pages[0].pszIcon = NULL;
-		pages[0].pfnDlgProc = SummaryPageProc;
-		pages[0].lParam = 0;
-
-		// Set up a page for each monitor
-		//
-		size_t listSize = Monitor::GetMonitorListSize();
-		for (size_t i = 0; i < listSize; ++i) {
-			pages[i+1].dwSize = sizeof(pages[0]);
-			pages[i+1].hInstance = g_hInst;
-			pages[i+1].pszTemplate = MAKEINTRESOURCE(IDD_MONITOR_PAGE_2);
-			//pages[i+1].pszTemplate = MAKEINTRESOURCE(IDD_MONITOR_PAGE);
-			pages[i+1].pszIcon = NULL;
-			pages[i+1].pfnDlgProc = MonitorPageProc;
-			pages[i+1].lParam = i;
-			StringCbCopy(headers[i], sizeof(headers[0]), Monitor::GetMonitorDeviceString(i).c_str());
-			pages[i+1].pszTitle = headers[i];
-			pages[i+1].dwFlags = PSP_USETITLE;
-		}
-
-		// Show the PropertySheet window
-		//
-		psh.dwSize = sizeof(psh);
-		psh.dwFlags =
-			PSH_PROPSHEETPAGE	|
-			PSH_NOAPPLYNOW		|
-			PSH_NOCONTEXTHELP	|
-			PSH_USEICONID		|
-			PSH_USECALLBACK
-			;
-		psh.hwndParent = NULL;
-		psh.hInstance = g_hInst;
-		psh.pszIcon = MAKEINTRESOURCE(IDI_BACKCOLOR);
-		wchar_t szCaption[256];
-		LoadString(g_hInst, IDS_CAPTION, szCaption, _countof(szCaption));
-		psh.pszCaption = szCaption;
-		psh.nPages = (UINT)pageCount;
-		psh.ppsp = pages;
-		psh.pfnCallback = PropSheetCallback;
-		INT_PTR retVal = PropertySheet(&psh);
-		DWORD err = GetLastError();
-		if ( err || (retVal < 0) ) {
-			wstring s = ShowError(L"PropertySheet");
-			wchar_t errorMessageCaption[256];
-			LoadString(g_hInst, IDS_ERROR, errorMessageCaption, _countof(errorMessageCaption));
-			MessageBox(NULL, s.c_str(), errorMessageCaption, MB_ICONINFORMATION | MB_OK);
-		}
-
-		delete [] pages;
-		delete [] headers;
-	}
-	catch (bad_alloc &ba) {
-		if (pages) {
-			delete [] pages;
-		}
-		if (headers) {
-			delete [] headers;
-		}
-		wchar_t exceptionMessage[256];
-		wchar_t errorMessage[256];
-		wchar_t errorMessageCaption[256];
-		int bigBufferSize;
-		wchar_t * bigBuffer = L"\0";
-
-		// Call MultiByteToWideChar() to get the required size of the output buffer
-		//
-		bigBufferSize = MultiByteToWideChar(
-				CP_ACP,								// Code page
-				0,									// Flags
-				ba.what(),							// Input string
-				-1,									// Count, -1 for NUL-terminated
-				NULL,								// No output buffer
-				0									// Zero output buffer size means "compute required size"
-		);
-
-		if (bigBufferSize) {
-
-			// Call MultiByteToWideChar() a second time to translate the string to Unicode
-			//
-			bigBuffer = new wchar_t[bigBufferSize];
-			int iRetVal = MultiByteToWideChar(
-					CP_ACP,							// Code page
-					0,								// Flags
-					ba.what(),						// Input string
-					-1,								// Count, -1 for NUL-terminated
-					bigBuffer,						// Unicode output buffer
-					bigBufferSize					// Buffer size in wide characters
-			);
-			if ( 0 == iRetVal ) {
-				bigBuffer[0] = L'\0';
-			}
-		}
-		LoadString(g_hInst, IDS_EXCEPTION, exceptionMessage, _countof(exceptionMessage));
-		StringCbPrintf(errorMessage, sizeof(errorMessage), exceptionMessage, bigBuffer);
-		LoadString(g_hInst, IDS_ERROR, errorMessageCaption, _countof(errorMessageCaption));
-		MessageBox(NULL, errorMessage, errorMessageCaption, MB_ICONINFORMATION | MB_OK);
-		delete [] bigBuffer;
-		return -1;
-	}
-	return 0;
-}
-
 int WINAPI WinMain(
 		HINSTANCE hInstance,
 		HINSTANCE hPrevInstance,
@@ -573,12 +102,11 @@ int WINAPI WinMain(
 		int nShowCmd
 ) {
 	UNREFERENCED_PARAMETER(hPrevInstance);
-	UNREFERENCED_PARAMETER(nShowCmd);
 
 	g_hInst = hInstance;
 
 #ifdef DEBUG_MEMORY_LEAKS
-	//_crtBreakAlloc = 147;		// To debug memory leaks, set this to allocation number ("{nnn}")
+	//_crtBreakAlloc = 240;		// To debug memory leaks, set this to allocation number ("{nnn}")
 #endif
 
 	// Turn on DEP, if available
@@ -603,20 +131,40 @@ int WINAPI WinMain(
 		}
 	}
 
+	// Find the directory for profiles (usually "C:\Windows\system32\spool\drivers\color")
+	//
+	FetchColorDirectory();
+
+	// Build lists of adapters and monitors
+	//
+	FetchMonitorInfo();
+
 	// See if we are invoked with the /L switch
 	//
 	int retval;
 	if (0 == strcmp(lpCmdLine, "/L")) {
 		retval = LoadLUTs();
 	} else {
-		retval = ShowLUTLoaderDialog();
+		retval = ShowPropertySheet(nShowCmd);
 	}
 
 #ifdef DEBUG_MEMORY_LEAKS
-	Monitor::ClearMonitorList(true);		// Forcibly free all vector memory to help see actual memory leaks
-	Adapter::ClearAdapterList(true);
+	Monitor::ClearList(true);			// Forcibly free all vector memory to help see actual memory leaks
+	Adapter::ClearList(true);
 	Resize::ClearResizeList(true);
 	Resize::ClearAnchorPresetList(true);
+	Profile::ClearList(true);
+	TreeViewItem::ClearList(true);
+	LUTview::ClearList(true);
+
+	if (ColorDirectory) {				// Two strings we may have 'new'-ed
+		delete [] ColorDirectory;
+		ColorDirectory = 0;
+	}
+	if (ColorDirectoryErrorString) {
+		delete [] ColorDirectoryErrorString;
+		ColorDirectoryErrorString = 0;
+	}
 
 	OutputDebugString(L">>>> LUTloader memory leak list -- start\n");
 	_CrtDumpMemoryLeaks();

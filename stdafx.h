@@ -4,7 +4,7 @@
 
 #pragma once
 
-#define STRICT
+#define STRICT								// Use strict type checking in <windows.h>
 
 #ifndef WINVER
 #define WINVER _WIN32_WINNT_WINXP			// Require Windows XP or above
@@ -27,11 +27,11 @@
 #endif
 
 #ifdef _DEBUG
-#define DEBUG_MEMORY_LEAKS
+#define DEBUG_MEMORY_LEAKS					// Look for memory leaks on program exit
 #endif
 
 #ifdef DEBUG_MEMORY_LEAKS
-	#define _CRTDBG_MAP_ALLOC
+	#define _CRTDBG_MAP_ALLOC				// Track memory allocations by source line
 	#include <stdlib.h>
 	#include <crtdbg.h>
 #endif // DEBUG_MEMORY_LEAKS

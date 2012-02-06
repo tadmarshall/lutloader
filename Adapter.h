@@ -1,4 +1,4 @@
-// Adapter.h -- Adapter class for handling display adapters returned by EnumDisplayDevices().
+// Adapter.h -- Adapter class for handling display adapters returned by EnumDisplayDevices()
 //
 
 #pragma once
@@ -9,16 +9,19 @@ class Adapter {
 public:
 	Adapter(const DISPLAY_DEVICEW & displayAdapter);
 
-	static bool IsAdapterActive(const DISPLAY_DEVICEW * displayAdapter);
-	static void ClearAdapterList(bool freeAllMemory);
-	static void AddAdapter(const Adapter & adapter);
-	static DWORD GetAdapterStateFlags(int adapterNumber);
-	static wstring GetAdapterDeviceName(int adapterNumber);
+	static Adapter * Add(Adapter * adapter);
+	static void ClearList(bool freeAllMemory);
+
+	DWORD GetStateFlags(void);
+	wstring GetDeviceName(void);
+
+	static bool IsActive(const DISPLAY_DEVICEW * displayAdapter);
+	static size_t GetListSize(void);
 
 private:
-	wstring DeviceName;
-	wstring DeviceString;
-	DWORD	StateFlags;
-	wstring DeviceID;
-	wstring DeviceKey;
+	wstring				DeviceName;
+	wstring				DeviceString;
+	DWORD				StateFlags;
+	wstring				DeviceID;
+	wstring				DeviceKey;
 };

@@ -1,33 +1,47 @@
-// Monitor.h -- Monitor class for handling display monitors returned by EnumDisplayDevices().
+// Monitor.h -- Monitor class for handling display monitors returned by EnumDisplayDevices()
 //
 
 #pragma once
 #include "stdafx.h"
+#include "Adapter.h"
 #include "Profile.h"
 
 class Monitor {
 
 public:
-	Monitor(int adapterNumber, const DISPLAY_DEVICEW & displayMonitor);
-	Monitor(const Monitor & from);
+	Monitor(Adapter * hostAdapter, const DISPLAY_DEVICEW & displayMonitor);
+	~Monitor();
+
+	void Initialize(void);
+
+	static Monitor * Add(Monitor * monitor);
+	static void ClearList(bool freeAllMemory);
+
 	wstring SummaryString(void) const;
 	wstring DetailsString(void) const;
+	bool GetActiveProfileIsUserProfile(void) const;
+	Profile * GetActiveProfile(void) const;
+	Profile * GetDefaultUserProfile(void) const;
+	Profile * GetDefaultSystemProfile(void) const;
+	ProfileList & GetProfileList(bool userProfiles);
+	wstring GetDeviceString(void) const;
+	LUT * GetLUT(void) const;
 
-	static bool IsMonitorActive(const DISPLAY_DEVICEW & displayMonitor);
-	static void ClearMonitorList(bool freeAllMemory);
-	static void AddMonitor(const Monitor & monitor);
-	static size_t GetMonitorListSize(void);
-	static Monitor & GetMonitor(size_t monitorNumber);
-	static wstring GetMonitorDeviceString(size_t monitorNumber);
+	static bool IsActive(const DISPLAY_DEVICEW & displayMonitor);
+	static size_t GetListSize(void);
+	static Monitor * Get(size_t index);
 
 private:
-	wstring		DeviceName;
-	wstring		DeviceString;
-	DWORD		StateFlags;
-	wstring		DeviceID;
-	wstring		DeviceKey;
-	Profile		UserProfile;
-	Profile		SystemProfile;
-	bool		activeProfileIsUserProfile;
-	int			AdapterNumber;
+	wstring				DeviceName;
+	wstring				DeviceString;
+	DWORD				StateFlags;
+	wstring				DeviceID;
+	wstring				DeviceKey;
+	Adapter *			adapter;
+	LUT *				pLUT;
+	Profile *			UserProfile;
+	ProfileList			UserProfileList;
+	Profile *			SystemProfile;
+	ProfileList			SystemProfileList;
+	bool				activeProfileIsUserProfile;
 };
