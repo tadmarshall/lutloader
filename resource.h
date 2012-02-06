@@ -13,6 +13,7 @@
 #define IDD_MONITOR_PAGE                201
 #define IDD_SUMMARY_PAGE_OLD            202
 #define IDD_MONITOR_PAGE_OLD            203
+#define IDD_SUMMARY_PAGE_SAVED          204
 #define IDI_ICON_SETUPAPI_35            300
 #define IDI_ICON_BLANK                  301
 #define IDI_BACKCOLOR                   302
@@ -23,6 +24,7 @@
 #define IDC_TREE1                       1005
 #define IDC_USE_WINDOWS_DISPLAY_CALIBRATION 1006
 #define IDC_SUMMARY_LUT                 1007
+#define IDC_LOAD_BUTTON                 1008
 
 // Next default values for new objects
 // 
@@ -31,7 +33,7 @@
 #define _APS_NO_MFC                     1
 #define _APS_NEXT_RESOURCE_VALUE        111
 #define _APS_NEXT_COMMAND_VALUE         40001
-#define _APS_NEXT_CONTROL_VALUE         1008
+#define _APS_NEXT_CONTROL_VALUE         1009
 #define _APS_NEXT_SYMED_VALUE           101
 #endif
 #endif

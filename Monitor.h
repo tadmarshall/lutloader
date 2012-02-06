@@ -21,11 +21,14 @@ public:
 	wstring DetailsString(void) const;
 	bool GetActiveProfileIsUserProfile(void) const;
 	Profile * GetActiveProfile(void) const;
-	Profile * GetDefaultUserProfile(void) const;
-	Profile * GetDefaultSystemProfile(void) const;
+	Profile * GetUserProfile(void) const;
+	Profile * GetSystemProfile(void) const;
 	ProfileList & GetProfileList(bool userProfiles);
 	wstring GetDeviceString(void) const;
-	LUT * GetLUT(void) const;
+	Adapter * GetAdapter(void);
+	LUT * GetLutPointer(void) const;
+	bool ReadLutFromCard(void);
+	bool WriteLutToCard(LUT * lutToWriteToWriteToAdapter);
 
 	static bool IsActive(const DISPLAY_DEVICEW & displayMonitor);
 	static size_t GetListSize(void);

@@ -33,10 +33,11 @@ public:
 	static void ClearList(bool freeAllMemory);
 
 	wstring GetName(void) const;
-	LUT * GetLUT(void) const;
-	wstring Load(bool forceReload);
+	LUT * GetLutPointer(void) const;
+	wstring LoadFullProfile(bool forceReload);
 	wstring DetailsString(void);
-	LUT_COMPARISON CompareLUT(LUT * otherLUT);
+	LUT_COMPARISON CompareLUT(LUT * otherLUT, DWORD * maxError, DWORD * totalError);
+	bool HasEmbeddedWcsProfile(void);
 
 	static Profile * GetAllProfiles(HKEY hKeyBase, const wchar_t * registryKey, bool * perUser, ProfileList & profileList);
 
@@ -45,7 +46,7 @@ private:
 	bool				loaded;							// 'true' if already loaded from disk
 	int					Index;							// Unique index number
 	int					RefCount;						// Reference count
-	wstring				ErrorString;					// If Load() fails, record error here
+	wstring				ErrorString;					// If LoadFullProfile() fails, record error here
 	wstring				ValidationFailures;				// Profile issues that don't prevent loading
 	LARGE_INTEGER		ProfileSize;					// File size
 	PROFILEHEADER *		ProfileHeader;					// Header (128 bytes)

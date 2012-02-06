@@ -3,6 +3,8 @@
 
 #include "stdafx.h"
 #include <commctrl.h>
+//#include <uxtheme.h>
+//#include <vssym32.h>
 #include "Monitor.h"
 #include "MonitorPage.h"
 #include "PropertySheet.h"
@@ -24,6 +26,10 @@ MonitorPage::MonitorPage(Monitor * hostMonitor) :
 
 void MonitorPage::SetEditControlText(wstring newText) {
 	SetDlgItemText(savedHWND, IDC_MONITOR_TEXT, newText.c_str());
+}
+
+Monitor * MonitorPage::GetMonitor(void) const {
+	return monitor;
 }
 
 // Build the TreeView
@@ -69,7 +75,7 @@ void MonitorPage::BuildTreeView(HWND treeControlHwnd) {
 		count = profileList.size();
 		tvInsertStruct.hParent = tvUserProfiles;
 		for (size_t i = 0; i < count; ++i) {
-			if ( profileList[i] == monitor->GetDefaultUserProfile() ) {
+			if ( profileList[i] == monitor->GetUserProfile() ) {
 				tvInsertStruct.itemex.mask = TVIF_TEXT | TVIF_PARAM | TVIF_STATE;
 			}
 			StringCbCopy(buf, sizeof(buf), profileList[i]->GetName().c_str());
@@ -98,7 +104,7 @@ void MonitorPage::BuildTreeView(HWND treeControlHwnd) {
 		count = profileList.size();
 		tvInsertStruct.hParent = tvSystemProfiles;
 		for (size_t i = 0; i < count; ++i) {
-			if ( profileList[i] == monitor->GetDefaultSystemProfile() ) {
+			if ( profileList[i] == monitor->GetSystemProfile() ) {
 				tvInsertStruct.itemex.mask = TVIF_TEXT | TVIF_PARAM | TVIF_STATE;
 			}
 			StringCbCopy(buf, sizeof(buf), profileList[i]->GetName().c_str());
@@ -124,7 +130,7 @@ void MonitorPage::BuildTreeView(HWND treeControlHwnd) {
 		count = profileList.size();
 		tvInsertStruct.hParent = tvSystemProfiles;
 		for (size_t i = 0; i < count; ++i) {
-			if ( profileList[i] == monitor->GetDefaultSystemProfile() ) {
+			if ( profileList[i] == monitor->GetSystemProfile() ) {
 				tvInsertStruct.itemex.mask = TVIF_TEXT | TVIF_PARAM | TVIF_STATE;
 			}
 			StringCbCopy(buf, sizeof(buf), profileList[i]->GetName().c_str());
@@ -241,6 +247,16 @@ INT_PTR CALLBACK MonitorPage::MonitorPageProc(HWND hWnd, UINT uMessage, WPARAM w
 			// Tell the resizing system that its window list is out of date
 			//
 			Resize::SetNeedRebuild(true);
+
+			// Try setting the fonts in the TreeView and Edit controls, ignoring the dialog template
+			//
+			HDC hdc = GetDC(hWnd);
+			HFONT hFont = GetFont(hdc, FC_INFORMATION);
+			ReleaseDC(hWnd, hdc);
+			SendMessage(treeControlHwnd, WM_SETFONT, (WPARAM)hFont, TRUE);
+			SendMessage(editControlHwnd, WM_SETFONT, (WPARAM)hFont, TRUE);
+
+			//SetWindowTheme(treeControlHwnd, L"Explorer", 0);
 
 			// Build the TreeView
 			//

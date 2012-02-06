@@ -4,13 +4,17 @@
 #pragma once
 #include "stdafx.h"
 
-// Used to convert DWORDs to display strings
-//
 typedef struct tagNAME_LOOKUP
 {
-	DWORD identifier;					// Identifier (e.g. PIDSI_TITLE (0x00000002) or VT_LPSTR (30))
-	const wchar_t * displayName;		// Display as (e.g. "Title" or "VT_LPSTR")
+	DWORD identifier;
+	const wchar_t * displayName;
 } NAME_LOOKUP;
+
+typedef enum tag_FONT_CLASS {
+	FC_HEADING = 0,
+	FC_FILENAME = 1,
+	FC_INFORMATION = 2
+} FONT_CLASS;
 
 wstring HexDump(const LPBYTE data, size_t size, size_t rowWidth);
 wstring ShowError(const wchar_t * functionName, const wchar_t * preMessageText = 0, const wchar_t * postMessageText = 0);
@@ -19,3 +23,4 @@ const wchar_t * LookupName(
 	const __in __ecount(tableSize) NAME_LOOKUP * nameTable,
 	DWORD tableSize,
 	DWORD identifier );
+HFONT GetFont(HDC hdc, FONT_CLASS fontClass);

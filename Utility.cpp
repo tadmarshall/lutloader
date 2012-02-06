@@ -82,3 +82,51 @@ const wchar_t * LookupName(
 	}
 	return L"";
 }
+
+// Get a font based on a font class
+//
+HFONT GetFont(HDC hdc, FONT_CLASS fontClass) {
+	int fontPitch = 9;
+	int fontWeight = FW_NORMAL;
+	switch (fontClass) {
+		case FC_HEADING:
+			//fontPitch = 17;
+			//fontPitch = 14;
+			fontPitch = 12;
+			fontWeight = FW_NORMAL;
+			//fontWeight = FW_MEDIUM;
+			//fontWeight = FW_SEMIBOLD;
+			//fontWeight = FW_BOLD;
+			break;
+
+		case FC_FILENAME:
+			fontPitch = 11;
+			fontWeight = FW_NORMAL;
+			//fontWeight = FW_MEDIUM;
+			//fontWeight = FW_SEMIBOLD;
+			//fontWeight = FW_BOLD;
+			break;
+
+		case FC_INFORMATION:
+			fontPitch = 9;
+			fontWeight = FW_NORMAL;
+			break;
+	}
+	int nHeight = -MulDiv(fontPitch, GetDeviceCaps(hdc, LOGPIXELSY), 72);
+	return CreateFont(
+		nHeight,					// height
+		0,							// width
+		0,							// escapement
+		0,							// orientation
+		fontWeight,					// weight
+		FALSE,						// italic
+		FALSE,						// underline
+		FALSE,						// strikeout
+		ANSI_CHARSET,				// character set
+		OUT_OUTLINE_PRECIS,			// output precision (want outline font)
+		CLIP_DEFAULT_PRECIS,		// clipping precision
+		CLEARTYPE_QUALITY,			// quality
+		FF_SWISS,					// font family
+		//L"Tahoma" );				// face name
+		L"Segoe UI" );				// face name
+}

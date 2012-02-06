@@ -6,6 +6,7 @@
 #include "Adapter.h"
 #include "LUTview.h"
 #include "Monitor.h"
+#include "MonitorSummaryItem.h"
 #include "PropertySheet.h"
 #include "Resize.h"
 #include "TreeViewItem.h"
@@ -15,6 +16,7 @@
 #include <wingdi.h>
 
 #pragma comment(lib, "mscms.lib")
+#pragma comment(lib, "uxtheme.lib")
 
 // Global externs defined in this file
 //
@@ -156,6 +158,7 @@ int WINAPI WinMain(
 	Profile::ClearList(true);
 	TreeViewItem::ClearList(true);
 	LUTview::ClearList(true);
+	MonitorSummaryItem::ClearList(true);
 
 	if (ColorDirectory) {				// Two strings we may have 'new'-ed
 		delete [] ColorDirectory;

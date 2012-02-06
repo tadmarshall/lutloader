@@ -3,6 +3,7 @@
 
 #pragma once
 #include "stdafx.h"
+#include <commctrl.h>
 #include "Monitor.h"
 
 class MonitorPage {
@@ -10,8 +11,9 @@ class MonitorPage {
 public:
 	MonitorPage(Monitor * hostMonitor);
 
-	void BuildTreeView(HWND treeControlHwnd);
 	void SetEditControlText(wstring newText);
+	Monitor * GetMonitor(void) const;
+	void BuildTreeView(HWND treeControlHwnd);
 
 	static INT_PTR CALLBACK MonitorPageProc(HWND hWnd, UINT uMessage, WPARAM wParam, LPARAM lParam);
 

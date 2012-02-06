@@ -367,6 +367,10 @@
 				>
 			</File>
 			<File
+				RelativePath=".\MonitorSummaryItem.cpp"
+				>
+			</File>
+			<File
 				RelativePath=".\Profile.cpp"
 				>
 			</File>
@@ -414,6 +418,10 @@
 			</File>
 			<File
 				RelativePath=".\MonitorPage.h"
+				>
+			</File>
+			<File
+				RelativePath=".\MonitorSummaryItem.h"
 				>
 			</File>
 			<File

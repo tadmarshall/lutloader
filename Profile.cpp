@@ -7,7 +7,7 @@
 #include "Utility.h"
 #include <strsafe.h>
 
-	extern wchar_t * ColorDirectory;
+extern wchar_t * ColorDirectory;
 	extern wchar_t * ColorDirectoryErrorString;
 
 // Reverse engineered embedded WCS profile header
@@ -228,8 +228,14 @@ wstring Profile::GetName(void) const {
 
 // Get profile's LUT pointer (may be zero)
 //
-LUT * Profile::GetLUT(void) const {
+LUT * Profile::GetLutPointer(void) const {
 	return pLUT;
+}
+
+// See if this profile has an embedded WCS profile in it
+//
+bool Profile::HasEmbeddedWcsProfile(void) {
+	return ( -1 != wcsProfileIndex );
 }
 
 // Return a list of all profiles associated with a given registry key, indicating the 'default' profile from the list
@@ -285,7 +291,7 @@ Profile * Profile::GetAllProfiles(HKEY hKeyBase, const wchar_t * registryKey, bo
 
 // Load profile info from disk
 //
-wstring Profile::Load(bool forceReload) {
+wstring Profile::LoadFullProfile(bool forceReload) {
 
 	wstring s;
 	wchar_t buf[1024];
@@ -834,7 +840,7 @@ wstring Profile::DetailsString(void) {
 		return ErrorString;
 	}
 	if ( 0 == ProfileSize.QuadPart ) {
-		Load(false);
+		LoadFullProfile(false);
 		if ( !ErrorString.empty() ) {
 			return ErrorString;
 		}
@@ -1130,10 +1136,177 @@ wstring Profile::DetailsString(void) {
 	return s;
 }
 
-LUT_COMPARISON Profile::CompareLUT(LUT * otherLUT) {
+// Compare the LUT for this profile with another LUT, and return the result
+//
+LUT_COMPARISON Profile::CompareLUT(LUT * otherLUT, DWORD * maxError, DWORD * totalError) {
 
 	if (!otherLUT) {
 		return LC_ERROR_NO_LUT_PROVIDED;
 	}
-	return LC_PROFILE_HAS_NO_LUT_OTHER_NONLINEAR;
+
+	bool thisLutIsLinear = true;
+	bool otherLutIsLinear = true;
+	bool lutsMatchExactly = true;
+	bool roundingIsPossible = true;
+	bool truncationIsPossible = true;
+	DWORD max = 0;
+	DWORD total = 0;
+	DWORD diff;
+	DWORD diff8;
+	DWORD diff16;
+	size_t i;
+
+	// If this profile has no LUT, we still need to check the other one
+	// for linearity
+	//
+	if ( 0 == pLUT ) {
+		for (i = 0; i < 256; ++i) {
+			WORD linear8 = static_cast<WORD>(i << 8);			// Two versions of linearity
+			WORD linear16 = static_cast<WORD>(linear8 + i);
+			if ( (otherLUT->red[i] != linear8) && (otherLUT->red[i] != linear16) ) {
+				otherLutIsLinear = false;
+				diff8 = (otherLUT->red[i] > linear8) ? (otherLUT->red[i] - linear8) : (linear8 - otherLUT->red[i]);
+				diff16 = (otherLUT->red[i] > linear16) ? (otherLUT->red[i] - linear16) : (linear16 - otherLUT->red[i]);
+				diff = (diff8 < diff16) ? diff8 : diff16;
+				max = (diff > max) ? diff : max;
+				total += diff;
+			}
+			if ( (otherLUT->green[i] != linear8) && (otherLUT->green[i] != linear16) ) {
+				otherLutIsLinear = false;
+				diff8 = (otherLUT->green[i] > linear8) ? (otherLUT->green[i] - linear8) : (linear8 - otherLUT->green[i]);
+				diff16 = (otherLUT->green[i] > linear16) ? (otherLUT->green[i] - linear16) : (linear16 - otherLUT->green[i]);
+				diff = (diff8 < diff16) ? diff8 : diff16;
+				max = (diff > max) ? diff : max;
+				total += diff;
+			}
+			if ( (otherLUT->blue[i] != linear8) && (otherLUT->blue[i] != linear16) ) {
+				otherLutIsLinear = false;
+				diff8 = (otherLUT->blue[i] > linear8) ? (otherLUT->blue[i] - linear8) : (linear8 - otherLUT->blue[i]);
+				diff16 = (otherLUT->blue[i] > linear16) ? (otherLUT->blue[i] - linear16) : (linear16 - otherLUT->blue[i]);
+				diff = (diff8 < diff16) ? diff8 : diff16;
+				max = (diff > max) ? diff : max;
+				total += diff;
+			}
+		}
+		if (maxError) {
+			*maxError = max;
+		}
+		if (totalError) {
+			*totalError = total;
+		}
+		return otherLutIsLinear ? LC_PROFILE_HAS_NO_LUT_OTHER_LINEAR : LC_PROFILE_HAS_NO_LUT_OTHER_NONLINEAR;
+	}
+
+	// We have two LUTs to compare, scan them in parallel
+	//
+	for (i = 0; i < 256; ++i) {
+		WORD linear8 = static_cast<WORD>(i << 8);			// Two versions of linearity
+		WORD linear16 = static_cast<WORD>(linear8 + i);
+
+		// Check for exact equality
+		//
+		if (pLUT->red[i] != otherLUT->red[i]) {
+			lutsMatchExactly = false;
+			diff = (otherLUT->red[i] > pLUT->red[i]) ? (otherLUT->red[i] - pLUT->red[i]) : (pLUT->red[i] - otherLUT->red[i]);
+			max = (diff > max) ? diff : max;
+			total += diff;
+		}
+		if (pLUT->green[i] != otherLUT->green[i]) {
+			lutsMatchExactly = false;
+			diff = (otherLUT->green[i] > pLUT->green[i]) ? (otherLUT->green[i] - pLUT->green[i]) : (pLUT->green[i] - otherLUT->green[i]);
+			max = (diff > max) ? diff : max;
+			total += diff;
+		}
+		if (pLUT->blue[i] != otherLUT->blue[i]) {
+			lutsMatchExactly = false;
+			diff = (otherLUT->blue[i] > pLUT->blue[i]) ? (otherLUT->blue[i] - pLUT->blue[i]) : (pLUT->blue[i] - otherLUT->blue[i]);
+			max = (diff > max) ? diff : max;
+			total += diff;
+		}
+
+		// Check for linearity (either version)
+		//
+		if ( (pLUT->red[i] != linear8) && (pLUT->red[i] != linear16) ) {
+			thisLutIsLinear = false;
+		}
+		if ( (pLUT->green[i] != linear8) && (pLUT->green[i] != linear16) ) {
+			thisLutIsLinear = false;
+		}
+		if ( (pLUT->blue[i] != linear8) && (pLUT->blue[i] != linear16) ) {
+			thisLutIsLinear = false;
+		}
+		if ( (otherLUT->red[i] != linear8) && (otherLUT->red[i] != linear16) ) {
+			otherLutIsLinear = false;
+		}
+		if ( (otherLUT->green[i] != linear8) && (otherLUT->green[i] != linear16) ) {
+			otherLutIsLinear = false;
+		}
+		if ( (otherLUT->blue[i] != linear8) && (otherLUT->blue[i] != linear16) ) {
+			otherLutIsLinear = false;
+		}
+
+		// See if differences can be accounted for by trucation or rounding
+		//
+		if ( 0 != (otherLUT->red[i] & 0xFF) ) {
+			roundingIsPossible = false;
+			truncationIsPossible = false;
+		} else {
+			if ( (otherLUT->red[i] & 0xFF00) != (pLUT->red[i] & 0xFF00) ) {
+				truncationIsPossible = false;
+			}
+			if ( (otherLUT->red[i] & 0xFF00) != ( (pLUT->red[i] + 0x80) & 0xFF00) ) {
+				roundingIsPossible = false;
+			}
+		}
+		if ( 0 != (otherLUT->green[i] & 0xFF) ) {
+			roundingIsPossible = false;
+			truncationIsPossible = false;
+		} else {
+			if ( (otherLUT->green[i] & 0xFF00) != (pLUT->green[i] & 0xFF00) ) {
+				truncationIsPossible = false;
+			}
+			if ( (otherLUT->green[i] & 0xFF00) != ( (pLUT->green[i] + 0x80) & 0xFF00) ) {
+				roundingIsPossible = false;
+			}
+		}
+		if ( 0 != (otherLUT->blue[i] & 0xFF) ) {
+			roundingIsPossible = false;
+			truncationIsPossible = false;
+		} else {
+			if ( (otherLUT->blue[i] & 0xFF00) != (pLUT->blue[i] & 0xFF00) ) {
+				truncationIsPossible = false;
+			}
+			if ( (otherLUT->blue[i] & 0xFF00) != ( (pLUT->blue[i] + 0x80) & 0xFF00) ) {
+				roundingIsPossible = false;
+			}
+		}
+	}
+
+	// Maybe return error counts
+	//
+	if (maxError) {
+		*maxError = max;
+	}
+	if (totalError) {
+		*totalError = total;
+	}
+
+	// We looked at every element ... what did we find?
+	//
+	if (lutsMatchExactly) {
+		return LC_EQUAL;
+	}
+	if (thisLutIsLinear && otherLutIsLinear) {
+		return LC_VARIATION_ON_LINEAR;
+	}
+	if (roundingIsPossible && truncationIsPossible) {
+		return LC_TRUNCATION_OR_ROUNDING;
+	}
+	if (truncationIsPossible) {
+		return LC_TRUNCATION_IN_LOW_BYTE;
+	}
+	if (roundingIsPossible) {
+		return LC_ROUNDING_IN_LOW_BYTE;
+	}
+	return LC_UNEQUAL;
 }

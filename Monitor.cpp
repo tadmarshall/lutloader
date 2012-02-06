@@ -31,19 +31,41 @@ Monitor::~Monitor() {
 	}
 }
 
-// Initialize
+// Read the LUT from the adapter
 //
-void Monitor::Initialize(void) {
-
-	// Make a copy of the current LUT
-	//
+bool Monitor::ReadLutFromCard(void) {
+	if (pLUT) {
+		delete [] pLUT;
+		pLUT = 0;
+	}
+	BOOL bRet = 0;
 	HDC hDC = CreateDC(adapter->GetDeviceName().c_str(), 0, 0, 0);
 	if (hDC) {
 		pLUT = new LUT;
 		SecureZeroMemory(pLUT, sizeof(LUT));
-		GetDeviceGammaRamp(hDC, pLUT);
+		bRet = GetDeviceGammaRamp(hDC, pLUT);
 		DeleteDC(hDC);
 	}
+	return ( 0 != bRet );
+}
+
+// Write a LUT (from any source) to the adapter
+//
+bool Monitor::WriteLutToCard(LUT * lutToWriteToWriteToAdapter) {
+	BOOL bRet = 0;
+	HDC hDC = CreateDC(adapter->GetDeviceName().c_str(), 0, 0, 0);
+	if (hDC) {
+		bRet = SetDeviceGammaRamp(hDC, lutToWriteToWriteToAdapter);
+		DeleteDC(hDC);
+	}
+	return ( 0 != bRet );
+}
+
+// Initialize
+//
+void Monitor::Initialize(void) {
+
+	ReadLutFromCard();
 
 	// Find all associated profiles
 	//
@@ -143,49 +165,59 @@ wstring Monitor::SummaryString(void) const {
 	// See if the loaded LUT is correct
 	//
 	Profile * active = GetActiveProfile();
-	active->Load(false);
-	switch (active->CompareLUT(pLUT)) {
+	active->LoadFullProfile(false);
+
+	DWORD maxError = 0;
+	DWORD totalError = 0;
+
+	LUT_COMPARISON result = active->CompareLUT(pLUT, &maxError, &totalError);
+
+	switch (result) {
 
 		// LUTs match word for word
 		//
 		case LC_EQUAL:
-			s += L"The currently loaded LUT matches the active profile exactly\r\n";
+			s += L"The current LUT matches the active profile\r\n";
 			break;
 
 		// One uses 0x0100, the other uses 0x0101 style
 		//
 		case LC_VARIATION_ON_LINEAR:
-			s += L"The currently loaded LUT and the active profile are both linear but with style differences\r\n";
+			s += L"The current LUT and the active profile are linear\r\n";
 			break;
 
 		// Low byte zeroed
 		//
 		case LC_TRUNCATION_IN_LOW_BYTE:
-			s += L"The currently loaded LUT is similar to the active profile but has had the low byte zeroed\r\n";
+			s += L"The current LUT is similar to the active profile (truncation)\r\n";
 			break;
 
 		// Windows 7 rounds to nearest high byte
 		//
 		case LC_ROUNDING_IN_LOW_BYTE:
-			s += L"The currently loaded LUT is similar to the active profile but has been rounded to the nearest multiple of 256\r\n";
+			s += L"The current LUT is similar to the active profile (rounding)\r\n";
 			break;
 
 		// Match, given the circumstances
 		//
 		case LC_PROFILE_HAS_NO_LUT_OTHER_LINEAR:
-			s += L"The currently loaded LUT is linear and the active profile has no LUT\r\n";
+			s += L"The current LUT is linear and the active profile has no LUT\r\n";
 			break;
 
 		// Mismatch, other should be linear
 		//
 		case LC_PROFILE_HAS_NO_LUT_OTHER_NONLINEAR:
-			s += L"The currently loaded LUT is  not linear but it should be because the active profile has no LUT\r\n";
+			if ( active->HasEmbeddedWcsProfile() ) {
+				s += L"The active profile is a Windows Color System profile, and has no LUT\r\n";
+			} else {
+				s += L"The current LUT is not linear and the active profile has no LUT\r\n";
+			}
 			break;
 
 		// LUTs do not meet any matching criteria
 		//
 		case LC_UNEQUAL:
-			s += L"The currently loaded LUT does not match the active profile\r\n";
+			s += L"The current LUT does not match the active profile\r\n";
 			break;
 
 	}
@@ -229,11 +261,11 @@ Profile * Monitor::GetActiveProfile(void) const {
 	return activeProfileIsUserProfile ? UserProfile : SystemProfile;
 }
 
-Profile * Monitor::GetDefaultUserProfile(void) const {
+Profile * Monitor::GetUserProfile(void) const {
 	return UserProfile;
 }
 
-Profile * Monitor::GetDefaultSystemProfile(void) const {
+Profile * Monitor::GetSystemProfile(void) const {
 	return SystemProfile;
 }
 
@@ -245,7 +277,11 @@ wstring Monitor::GetDeviceString(void) const {
 	return DeviceString;
 }
 
-LUT * Monitor::GetLUT(void) const {
+Adapter * Monitor::GetAdapter(void) {
+	return adapter;
+}
+
+LUT * Monitor::GetLutPointer(void) const {
 	return pLUT;
 }
 

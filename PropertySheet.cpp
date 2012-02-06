@@ -3,16 +3,34 @@
 
 #include "stdafx.h"
 #include <commctrl.h>
+#include <uxtheme.h>
 #include "LUTview.h"
 #include "Monitor.h"
 #include "MonitorPage.h"
+#include "MonitorSummaryItem.h"
 #include "PropertySheet.h"
 #include "Resize.h"
-#include "Utility.h"
 #include "resource.h"
+#include "Utility.h"
 #include <strsafe.h>
 
 //#include <shellapi.h>
+
+// Optional "features"
+//
+#define SHOW_EXTRA_COPY_OF_FIRST_MONITOR 1
+#define SHOW_LUTVIEW_OF_FIRST_MONITOR 1
+#define SHOW_PROFILE_IN_LUTVIEW_INSTEAD_OF_MONITOR 0
+
+// Some constants
+//
+#define INITIAL_VERTICAL_OFFSET (7)
+#define HORIZONTAL_PADDING_LEFT (7)
+#define HORIZONTAL_PADDING_RIGHT (16 - 7)
+#define EXTRA_VERTICAL_SPACING_BETWEEN_ITEMS (4)
+#define FRAME_COLOR RGB(192,192,192)
+#define STOCK_OBJECT_FOR_BACKGROUND WHITE_BRUSH
+//#define LV_SIZE 220
 
 // Symbols defined in other files
 //
@@ -20,16 +38,22 @@ extern HINSTANCE g_hInst;
 
 // Global externs defined in this file
 //
-extern WNDPROC oldEditWindowProc = 0;			// The original Edit control's window procedure
-extern HWND hwnd_IDC_ORIGINAL_SIZE = 0;			// The window handle of the IDC_ORIGINAL_SIZE static control
-extern HWND hwnd_IDC_RESIZED = 0;				// The window handle of the IDC_RESIZE static control
-extern SIZE minimumWindowSize = {0};			// The minimum size of the PropertySheet window
+extern WNDPROC oldEditWindowProc = 0;				// The original Edit control's window procedure
+extern HWND hwnd_IDC_ORIGINAL_SIZE = 0;				// The window handle of the IDC_ORIGINAL_SIZE static control
+extern HWND hwnd_IDC_RESIZED = 0;					// The window handle of the IDC_RESIZE static control
+extern SIZE minimumWindowSize = {0};				// The minimum size of the PropertySheet window
 
 // Global static symbols internal to this file
 //
-static WNDPROC oldPropSheetWindowProc = 0;		// The original PropertySheet's window procedure
-static LUTview * summaryLutView = 0;			// The single LUT viewer on the Summary page
-static HWND hwndSummaryLUT = 0;					// HWND for LUTview we created
+static WNDPROC oldPropSheetWindowProc = 0;			// The original PropertySheet's window procedure
+static MonitorSummaryItem * testMonitorItem = 0;	// The single LUT viewer on the Summary page
+static HWND hwndTestMonitorItem = 0;				// HWND for test MonitorSummaryItem we created
+static bool summaryPageWasShown = false;			// Just a flag that the PropertySheet at least started us
+
+#if SHOW_LUTVIEW_OF_FIRST_MONITOR
+static LUTview * summaryLutView = 0;				// The single LUT viewer on the Summary page
+static HWND hwndSummaryLUT = 0;						// HWND for LUTview we created
+#endif
 
 // Subclass procedure for edit control
 //
@@ -80,10 +104,22 @@ INT_PTR CALLBACK SummaryPageProc(HWND hWnd, UINT uMessage, WPARAM wParam, LPARAM
 	UNREFERENCED_PARAMETER(lParam);
 
 	RECT rect;
+	HDC hdc;
+	int desiredHeight;
+	WINDOWINFO wi;
+	int yOffset;
 
 	switch (uMessage) {
 		case WM_INITDIALOG:
 		{
+			// This is a flag to reduce seeing bogus error reporting on return from
+			// PropertySheet().  It can sometimes fail without setting a negative
+			// return code, and our check for GetLastError() is required.  But we can't
+			// just check GetLastError(), because there may well be a last error even
+			// if it all worked.  So, we won't check GetLastError() if we've at least
+			// received the WM_INITDIALOG.
+			//
+			summaryPageWasShown = true;
 
 			// Remember our size before any resizing as our minimum size
 			//
@@ -95,8 +131,9 @@ INT_PTR CALLBACK SummaryPageProc(HWND hWnd, UINT uMessage, WPARAM wParam, LPARAM
 
 			// Subclass the edit control
 			//
-			oldEditWindowProc = (WNDPROC)(INT_PTR)SetWindowLongPtr(GetDlgItem(hWnd, IDC_SUMMARY_TEXT), GWLP_WNDPROC, (__int3264)(LONG_PTR)EditSubclassProc);
+			//oldEditWindowProc = (WNDPROC)(INT_PTR)SetWindowLongPtr(GetDlgItem(hWnd, IDC_SUMMARY_TEXT), GWLP_WNDPROC, (__int3264)(LONG_PTR)EditSubclassProc);
 
+#if 0
 			// See if we should show the "Use Windows display calibration" checkbox, and if so, set it
 			//
 			typedef BOOL (WINAPI * PFN_WcsGetCalibrationManagementState)(BOOL *);
@@ -119,28 +156,35 @@ INT_PTR CALLBACK SummaryPageProc(HWND hWnd, UINT uMessage, WPARAM wParam, LPARAM
 							0 );
 				}
 			}
+#endif
 
-			// Create and show the LUT viewer
+			yOffset = INITIAL_VERTICAL_OFFSET;
+
+#if SHOW_EXTRA_COPY_OF_FIRST_MONITOR
+
+			// Create and show a monitor summary item
 			//
-			summaryLutView = LUTview::Add(new LUTview(L"Monitor"));
+			testMonitorItem = MonitorSummaryItem::Add(new MonitorSummaryItem(Monitor::Get(0)));
 
-			WINDOWINFO wi;
 			SecureZeroMemory(&wi, sizeof(wi));
 			wi.cbSize = sizeof(wi);
 			GetWindowInfo(hWnd, &wi);
 
-			WINDOWINFO wiEdit;
-			SecureZeroMemory(&wiEdit, sizeof(wiEdit));
-			wiEdit.cbSize = sizeof(wiEdit);
-			GetWindowInfo(GetDlgItem(hWnd, IDC_SUMMARY_TEXT), &wiEdit);
+			hdc = GetDC(hWnd);
+			desiredHeight = testMonitorItem->GetDesiredHeight(hdc);
+			ReleaseDC(hWnd, hdc);
 
-#define LV_SIZE (220)
-			hwndSummaryLUT = summaryLutView->CreateLUTviewWindow(
+			hwndTestMonitorItem = testMonitorItem->CreateMonitorSummaryItemWindow(
 					hWnd,
-					(wiEdit.rcWindow.right - wiEdit.rcWindow.left - LV_SIZE) / 2,
-					4 + wiEdit.rcWindow.bottom - wi.rcClient.top,
-					LV_SIZE,
-					LV_SIZE );
+					HORIZONTAL_PADDING_LEFT,
+					yOffset,
+					wi.rcClient.right - wi.rcClient.left - (HORIZONTAL_PADDING_LEFT + HORIZONTAL_PADDING_RIGHT),
+					desiredHeight );
+			SetWindowLongPtr(hwndTestMonitorItem, GWLP_ID, 0x123);
+
+			GetWindowRect(hwndTestMonitorItem, &rect);
+			yOffset = rect.bottom - wi.rcClient.top + EXTRA_VERTICAL_SPACING_BETWEEN_ITEMS;
+#endif
 
 			// This page and its subwindows should grow with resizing
 			//
@@ -152,20 +196,12 @@ INT_PTR CALLBACK SummaryPageProc(HWND hWnd, UINT uMessage, WPARAM wParam, LPARAM
 			anchorPreset.anchorBottom = true;
 			Resize::AddAchorPreset(anchorPreset);
 
-			anchorPreset.hwnd = hwndSummaryLUT;
-			Resize::AddAchorPreset(anchorPreset);
-
-			anchorPreset.anchorBottom = false;
-			anchorPreset.hwnd = GetDlgItem(hWnd, IDC_SUMMARY_TEXT);
-			Resize::AddAchorPreset(anchorPreset);
-
 			// These two hidden windows are used to track resizing prior to
 			// other pages being created.  We set IDC_RESIZED to grow in all
 			// dimensions, and set IDC_ORIGINAL_SIZE to not grow at all.
 			// By comparing their sizes, we can fix up the sizes and positions
 			// of newly created controls on other pages.
 			//
-			anchorPreset.anchorBottom = true;
 			hwnd_IDC_RESIZED = GetDlgItem(hWnd, IDC_RESIZED);
 			anchorPreset.hwnd = hwnd_IDC_RESIZED;
 			Resize::AddAchorPreset(anchorPreset);
@@ -178,15 +214,66 @@ INT_PTR CALLBACK SummaryPageProc(HWND hWnd, UINT uMessage, WPARAM wParam, LPARAM
 			anchorPreset.hwnd = hwnd_IDC_ORIGINAL_SIZE;
 			Resize::AddAchorPreset(anchorPreset);
 
+#if 0
 			anchorPreset.anchorLeft = true;
 			anchorPreset.anchorBottom = true;
 			anchorPreset.hwnd = GetDlgItem(hWnd, IDC_USE_WINDOWS_DISPLAY_CALIBRATION);
 			Resize::AddAchorPreset(anchorPreset);
 
-			// Tell the resizing system that its window list is out of date
-			//
-			Resize::SetNeedRebuild(true);
+			anchorPreset.hwnd = hwndTestMonitorItem;
+			Resize::AddAchorPreset(anchorPreset);
 
+			anchorPreset.anchorBottom = false;
+			anchorPreset.hwnd = GetDlgItem(hWnd, IDC_SUMMARY_TEXT);
+			Resize::AddAchorPreset(anchorPreset);
+#endif
+
+			//HTHEME hTheme = OpenThemeData(hWnd, L"Button");
+
+#if 1
+			// Build the contents of the Summary page
+			//
+			//wstring summaryString;
+
+			SecureZeroMemory(&wi, sizeof(wi));
+			wi.cbSize = sizeof(wi);
+			GetWindowInfo(hWnd, &wi);
+
+			size_t count = Monitor::GetListSize();
+			for (size_t i = 0; i < count; ++i) {
+
+				MonitorSummaryItem * mi = 0;
+				HWND hw = 0;
+
+				// Create and show a monitor summary item
+				//
+				mi = MonitorSummaryItem::Add(new MonitorSummaryItem(Monitor::Get(i)));
+
+				//int yOffset = INITIAL_VERTICAL_OFFSET;
+
+				hdc = GetDC(hWnd);
+				desiredHeight = mi->GetDesiredHeight(hdc);
+				ReleaseDC(hWnd, hdc);
+
+				hw = mi->CreateMonitorSummaryItemWindow(
+						hWnd,
+						HORIZONTAL_PADDING_LEFT,
+						yOffset,
+						wi.rcClient.right - wi.rcClient.left - (HORIZONTAL_PADDING_LEFT + HORIZONTAL_PADDING_RIGHT),
+						desiredHeight );
+				GetWindowRect(hw, &rect);
+				yOffset = rect.bottom - wi.rcClient.top + EXTRA_VERTICAL_SPACING_BETWEEN_ITEMS;
+			}
+			//if ( 0 == count ) {
+			//	wchar_t noMonitorsFound[256];
+			//	LoadString(g_hInst, IDS_NO_MONITORS_FOUND, noMonitorsFound, _countof(noMonitorsFound));
+			//	SetDlgItemText(hWnd, IDC_SUMMARY_TEXT, noMonitorsFound);
+			//} else {
+			//	DWORD tabSpacing = 8;
+			//	SendDlgItemMessage(hWnd, IDC_MONITOR_TEXT, EM_SETTABSTOPS, 1, (LPARAM)&tabSpacing);
+			//	SetDlgItemText(hWnd, IDC_SUMMARY_TEXT, summaryString.c_str());
+			//}
+#else
 			// Build a display string describing the monitors we found
 			//
 			wstring summaryString;
@@ -206,19 +293,48 @@ INT_PTR CALLBACK SummaryPageProc(HWND hWnd, UINT uMessage, WPARAM wParam, LPARAM
 				SendDlgItemMessage(hWnd, IDC_MONITOR_TEXT, EM_SETTABSTOPS, 1, (LPARAM)&tabSpacing);
 				SetDlgItemText(hWnd, IDC_SUMMARY_TEXT, summaryString.c_str());
 			}
+#endif
+
+#if SHOW_LUTVIEW_OF_FIRST_MONITOR
+			// Create and show the LUT viewer
+			//
+			summaryLutView = LUTview::Add(new LUTview(L"Monitor"));
+
+			SecureZeroMemory(&wi, sizeof(wi));
+			wi.cbSize = sizeof(wi);
+			GetWindowInfo(hWnd, &wi);
+
+			hwndSummaryLUT = summaryLutView->CreateLUTviewWindow(
+					hWnd,
+					HORIZONTAL_PADDING_LEFT,
+					yOffset,
+					wi.rcClient.right - wi.rcClient.left - (HORIZONTAL_PADDING_LEFT + HORIZONTAL_PADDING_RIGHT),
+					wi.rcClient.bottom - wi.rcClient.top - yOffset - EXTRA_VERTICAL_SPACING_BETWEEN_ITEMS );
+
+			anchorPreset.hwnd = hwndSummaryLUT;
+			anchorPreset.anchorLeft = true;
+			anchorPreset.anchorTop = true;
+			anchorPreset.anchorRight = true;
+			anchorPreset.anchorBottom = true;
+			Resize::AddAchorPreset(anchorPreset);
 
 			// This is only for testing (as is having a LUT Viewer on the Summary page),
 			// but just hard-code the viewer to display the first monitor
 			//
-#define SHOW_PROFILE 0
-#if SHOW_PROFILE
+  #if SHOW_PROFILE_IN_LUTVIEW_INSTEAD_OF_MONITOR
 			summaryLutView->SetText(L"Active profile");
-			Monitor::Get(0)->GetActiveProfile()->Load(false);
-			summaryLutView->SetLUT(Monitor::Get(0)->GetActiveProfile()->GetLUT());
-#else
+			Monitor::Get(0)->GetActiveProfile()->LoadFullProfile(false);
+			summaryLutView->SetLUT(Monitor::Get(0)->GetActiveProfile()->GetLutPointer());
+  #else
 			summaryLutView->SetText(L"Real monitor");
-			summaryLutView->SetLUT(Monitor::Get(0)->GetLUT());
+			summaryLutView->SetLUT(Monitor::Get(0)->GetLutPointer());
+  #endif
 #endif
+
+			// Tell the resizing system that its window list is out of date
+			//
+			Resize::SetNeedRebuild(true);
+
 			break;
 		}
 
@@ -301,6 +417,10 @@ int CALLBACK PropSheetCallback(HWND hWnd, UINT uMsg, LPARAM lParam) {
 
 		case PSCB_INITIALIZED:
 
+			// Fooling around ... try running with themes (visual styles) disabled
+			//
+			//SetWindowTheme(hWnd, L" ", L" ");
+
 			// Add the SysTabControl32 control to the anchor list
 			//
 			HWND tabControl;
@@ -314,6 +434,13 @@ int CALLBACK PropSheetCallback(HWND hWnd, UINT uMsg, LPARAM lParam) {
 				anchorPreset.anchorBottom = true;
 				Resize::AddAchorPreset(anchorPreset);
 			}
+
+			// More fun and games ... try changing the font on the tab control
+			//
+			HDC hdc = GetDC(hWnd);
+			HFONT hFont = GetFont(hdc, FC_INFORMATION);
+			ReleaseDC(hWnd, hdc);
+			SendMessage(tabControl, WM_SETFONT, (WPARAM)hFont, TRUE);
 
 			// Subclass the property sheet
 			//
@@ -335,8 +462,9 @@ int ShowPropertySheet(int nShowCmd) {
 	icce.dwICC = ICC_WIN95_CLASSES;
 	InitCommonControlsEx(&icce);
 
-	// Register the LUT viewer window class
+	// Register the window classes we use in the property sheet
 	//
+	MonitorSummaryItem::RegisterWindowClass();
 	LUTview::RegisterWindowClass();
 
 	// Set up property sheet
@@ -412,8 +540,15 @@ int ShowPropertySheet(int nShowCmd) {
 		psh.ppsp = pages;
 		psh.nStartPage = 0;								// 0 == Summary page, 1 == 1st Monitor page for testing
 		psh.pfnCallback = PropSheetCallback;
+		summaryPageWasShown = false;
+		SetLastError(0);
 		INT_PTR retVal = PropertySheet(&psh);
-		DWORD err = GetLastError();
+		DWORD err;
+		if (summaryPageWasShown) {
+			err = 0;
+		} else {
+			err = GetLastError();
+		}
 		if ( err || (retVal < 0) ) {
 			wstring s = ShowError(L"PropertySheet");
 			wchar_t errorMessageCaption[256];

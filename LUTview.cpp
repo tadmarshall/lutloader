@@ -6,6 +6,26 @@
 #include "LUTview.h"
 #include <strsafe.h>
 
+// Optional "features"
+//
+#define SHOW_GRAY_BACKGROUND 1
+#define SHOW_BLACK_BACKGROUND_INSTEAD_OF_WHITE 1
+
+// Some constants
+//
+#define FRAME_COLOR RGB(192, 192, 192)
+
+#if SHOW_GRAY_BACKGROUND
+  #define STOCK_OBJECT_FOR_BACKGROUND			LTGRAY_BRUSH
+#else
+	#if SHOW_BLACK_BACKGROUND_INSTEAD_OF_WHITE
+	  #define STOCK_OBJECT_FOR_BACKGROUND		BLACK_BRUSH
+	#else
+	  #define STOCK_OBJECT_FOR_BACKGROUND		WHITE_BRUSH
+	#endif
+#endif
+
+
 // Symbols defined in other files
 //
 extern HINSTANCE g_hInst;
@@ -37,7 +57,7 @@ LUTview * LUTview::Add(LUTview * newView) {
 	return newView;
 }
 
-// Clear the list of adapters
+// Clear the list of viewers
 //
 void LUTview::ClearList(bool freeAllMemory) {
 	size_t count = lutViewList.size();
@@ -118,7 +138,7 @@ HWND LUTview::CreateLUTviewWindow(
 			width,
 			height,
 			viewerParent,
-			0, // menu
+			(HMENU)0,
 			g_hInst,
 			this );
 	return hwnd;
@@ -163,7 +183,9 @@ void LUTview::DrawImageOnDC(HDC hdc) {
 	// Draw the background
 	//
 	//FillRect(hdc, &innerRect, (HBRUSH)GetStockObject(BLACK_BRUSH));
-	FillRect(hdc, &innerRect, (HBRUSH)GetStockObject(WHITE_BRUSH));
+	//FillRect(hdc, &innerRect, (HBRUSH)GetStockObject(WHITE_BRUSH));
+
+	FillRect(hdc, &innerRect, (HBRUSH)GetStockObject(STOCK_OBJECT_FOR_BACKGROUND));
 
 	// Draw a frame
 	//
@@ -183,7 +205,7 @@ void LUTview::DrawImageOnDC(HDC hdc) {
 	pt[4].x = innerRect.left;
 	pt[4].y = innerRect.top;
 
-	HGDIOBJ framePen = CreatePen(PS_SOLID, 0, RGB(192, 192, 192));
+	HGDIOBJ framePen = CreatePen(PS_SOLID, 0, FRAME_COLOR);
 	HGDIOBJ oldPen = SelectObject(hdc, framePen);
 	Polyline(hdc, pt, 5);
 
