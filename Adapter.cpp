@@ -24,10 +24,20 @@ bool Adapter::IsAdapterActive(PDISPLAY_DEVICE displayAdapter) {
 //
 static vector <Adapter> adapterList;
 
+// Clear the list of adapters
+//
+void Adapter::ClearAdapterList(bool freeAllMemory) {
+	adapterList.clear();
+	if ( freeAllMemory && (adapterList.capacity() > 0) ) {
+		vector <Adapter> dummy;
+		adapterList.swap(dummy);
+	}
+}
+
 // Add an adapter to the end of the list
 //
-void Adapter::AddAdapter(Adapter adapter) {
-	adapterList.push_back(adapter);
+void Adapter::AddAdapter(Adapter * const adapter) {
+	adapterList.push_back(*adapter);
 }
 
 // Fetch an adapter's StateFlags by index number

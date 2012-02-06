@@ -10,7 +10,8 @@ public:
 	Adapter(PDISPLAY_DEVICE displayAdapter);
 
 	static bool IsAdapterActive(PDISPLAY_DEVICE displayAdapter);
-	static void AddAdapter(Adapter adapter);
+	static void ClearAdapterList(bool freeAllMemory);
+	static void AddAdapter(Adapter * const adapter);
 	static DWORD GetAdapterStateFlags(int adapterNumber);
 	static wstring GetAdapterDeviceName(int adapterNumber);
 

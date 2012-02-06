@@ -359,6 +359,10 @@
 				>
 			</File>
 			<File
+				RelativePath=".\Profile.cpp"
+				>
+			</File>
+			<File
 				RelativePath=".\stdafx.cpp"
 				>
 			</File>
@@ -374,6 +378,10 @@
 			</File>
 			<File
 				RelativePath=".\Monitor.h"
+				>
+			</File>
+			<File
+				RelativePath=".\Profile.h"
 				>
 			</File>
 			<File
