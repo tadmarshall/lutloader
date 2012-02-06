@@ -14,6 +14,14 @@
 #include "resource.h"
 #include <strsafe.h>
 
+// Global externs defined in this file
+//
+extern WNDPROC oldEditWindowProc = 0;				// The original Edit control's window procedure
+
+// Symbols defined in other files
+//
+extern double dpiScale;								// Scaling factor for dots per inch (actual versus standard 96 DPI)
+
 // Constructor
 //
 MonitorPage::MonitorPage(Monitor * hostMonitor) :
@@ -147,6 +155,47 @@ void MonitorPage::BuildTreeView(HWND treeControlHwnd) {
 	SendMessage(treeControlHwnd, TVM_EXPAND, TVE_EXPAND, reinterpret_cast<LPARAM>(tvRoot));
 }
 
+// Subclass procedure for edit control
+//
+INT_PTR CALLBACK EditSubclassProc(HWND hWnd, UINT uMessage, WPARAM wParam, LPARAM lParam) {
+
+	switch (uMessage) {
+
+		// This prevents us from auto-selecting all text when we get the focus
+		//
+		case WM_GETDLGCODE:
+			INT_PTR temp;
+			temp = CallWindowProcW(oldEditWindowProc, hWnd, uMessage, wParam, lParam);
+			return temp & ~DLGC_HASSETSEL;
+			break;
+
+		// This enables control-A as a hotkey for Select All
+		//
+		case WM_CHAR:
+			if (1 == wParam) {
+				uMessage = EM_SETSEL;
+				wParam = 0;
+				lParam = -1;
+			}
+			return CallWindowProc(oldEditWindowProc, hWnd, uMessage, wParam, lParam);
+			break;
+
+#if 0
+		case WM_ERASEBKGND:
+			RECT rect;
+			GetClientRect(hWnd, &rect);
+			HDC hdc;
+			hdc = GetDC(hWnd);
+			FillRect(hdc, &rect, (HBRUSH)(COLOR_BTNFACE + 1));
+			//FillRect(hdc, &rect, (HBRUSH)(COLOR_BTNHIGHLIGHT + 1));
+			ReleaseDC(hWnd, hdc);
+			return 1;
+#endif
+
+	}
+	return CallWindowProc(oldEditWindowProc, hWnd, uMessage, wParam, lParam);
+}
+
 // Monitor page dialog proc
 //
 INT_PTR CALLBACK MonitorPage::MonitorPageProc(HWND hWnd, UINT uMessage, WPARAM wParam, LPARAM lParam) {
@@ -251,7 +300,7 @@ INT_PTR CALLBACK MonitorPage::MonitorPageProc(HWND hWnd, UINT uMessage, WPARAM w
 			// Try setting the fonts in the TreeView and Edit controls, ignoring the dialog template
 			//
 			HDC hdc = GetDC(hWnd);
-			HFONT hFont = GetFont(hdc, FC_INFORMATION);
+			HFONT hFont = GetFont(hdc, FC_INFORMATION, true);
 			ReleaseDC(hWnd, hdc);
 			SendMessage(treeControlHwnd, WM_SETFONT, (WPARAM)hFont, TRUE);
 			SendMessage(editControlHwnd, WM_SETFONT, (WPARAM)hFont, TRUE);
@@ -400,10 +449,12 @@ INT_PTR CALLBACK MonitorPage::MonitorPageProc(HWND hWnd, UINT uMessage, WPARAM w
 				splitterActive = true;
 				SetCapture(hWnd);
 
+				int minimumTreeviewWidth = static_cast<int>(MINIMUM_TREEVIEW_WIDTH * dpiScale);
+				int minimumEditWidth = static_cast<int>(MINIMUM_EDIT_WIDTH * dpiScale);
 				xLeft = (tvRect.right - wiParent.rcClient.left);
-				xLeftLimit = (tvRect.left - wiParent.rcClient.left) + MINIMUM_TREEVIEW_WIDTH;
+				xLeftLimit = (tvRect.left - wiParent.rcClient.left) + minimumTreeviewWidth;
 				xRight = (edRect.left - wiParent.rcClient.left);
-				xRightLimit = (edRect.right - wiParent.rcClient.left) - MINIMUM_EDIT_WIDTH;
+				xRightLimit = (edRect.right - wiParent.rcClient.left) - minimumEditWidth;
 				xOffset = xPos - xLeft;
 			}
 			break;

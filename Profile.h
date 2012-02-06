@@ -27,7 +27,6 @@ public:
 
 	void Initialize(void);
 	void AddRef(void);
-	//void Delete(void);
 
 	static Profile * Add(Profile * profile);
 	static void ClearList(bool freeAllMemory);

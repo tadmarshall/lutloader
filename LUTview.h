@@ -7,10 +7,17 @@
 
 #define LUTVIEW_CLASS_NAME (L"LUT Viewer")
 
+typedef enum tag_LUT_GRAPH_DISPLAY_STYLE {
+	LGDS_WHITE = 0,
+	LGDS_BLACK = 1,
+	LGDS_GRADIENT = 2
+} LUT_GRAPH_DISPLAY_STYLE;
+
 class LUTview {
 
 public:
-	LUTview(const wchar_t * text);
+	LUTview(wstring text, LUT_GRAPH_DISPLAY_STYLE displayStyle, bool userControl);
+	~LUTview();
 
 	static LUTview * Add(LUTview * lutView);
 	static void ClearList(bool freeAllMemory);
@@ -30,11 +37,16 @@ public:
 
 private:
 	void DrawImageOnDC(HDC hdc);
-	void DrawTextOnDC(HDC hdc);
+	void DrawNoLutTextOnDC(HDC hdc);
 
 	static LRESULT CALLBACK LUTviewWndProc(HWND hWnd, UINT uMessage, WPARAM wParam, LPARAM lParam);
 
-	wstring				displayText;
-	HWND				hwnd;
-	LUT *				pLUT;
+	wstring						displayText;
+	LUT_GRAPH_DISPLAY_STYLE		graphDisplayStyle;
+	bool						userCanChangeDisplayMode;
+	HWND						hwnd;
+	LUT *						pLUT;
+	RECT						outerRect;
+	RECT						innerRect;
+	UINT						paintCount;
 };

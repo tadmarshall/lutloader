@@ -37,5 +37,7 @@ private:
 	RECT				activeProfileRect;
 	RECT				lutStatusRect;
 	RECT				primaryMonitorRect;
+	bool				lutViewShowsProfile;
+	wstring				activeProfileDisplayText;
 	UINT				paintCount;
 };

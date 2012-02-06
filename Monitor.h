@@ -28,7 +28,7 @@ public:
 	Adapter * GetAdapter(void);
 	LUT * GetLutPointer(void) const;
 	bool ReadLutFromCard(void);
-	bool WriteLutToCard(LUT * lutToWriteToWriteToAdapter);
+	bool WriteLutToCard(LUT * lutToWriteToAdapter);
 
 	static bool IsActive(const DISPLAY_DEVICEW & displayMonitor);
 	static size_t GetListSize(void);

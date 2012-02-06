@@ -2,6 +2,7 @@
 //
 
 #include "stdafx.h"
+#include <math.h>
 #include "LUT.h"
 #include "Profile.h"
 #include "Utility.h"
@@ -160,29 +161,11 @@ Profile::~Profile() {
 	}
 }
 
-#if 0
-// Initialize
-//
-void Profile::Initialize(void) {
-}
-#endif
-
 // AddRef
 //
 void Profile::AddRef(void) {
 	++RefCount;
 }
-
-#if 0
-// Delete
-//
-void Profile::Delete(void) {
-	--RefCount;
-	if ( 0 == RefCount ) {
-		delete this;
-	}
-}
-#endif
 
 // Vector of profiles
 //
@@ -244,6 +227,7 @@ Profile * Profile::GetAllProfiles(HKEY hKeyBase, const wchar_t * registryKey, bo
 	HKEY hKey;
 	int len = 0;
 	Profile * profile = 0;
+	pList.clear();
 	if (ERROR_SUCCESS == RegOpenKeyEx(hKeyBase, registryKey, 0, KEY_QUERY_VALUE, &hKey)) {
 		DWORD dataSize;
 
@@ -741,6 +725,10 @@ wstring Profile::LoadFullProfile(bool forceReload) {
 				}
 			}
 		} else {
+
+			// We have a formula type of 'vcgt', but we work mainly with tables, so store whatever
+			// is there, then see if we can generate a table from it
+			//
 			vcgtHeader.vcgtContents.f.vcgtRedGamma = swap32(pVCGT->vcgtContents.f.vcgtRedGamma);
 			vcgtHeader.vcgtContents.f.vcgtRedMin = swap32(pVCGT->vcgtContents.f.vcgtRedMin);
 			vcgtHeader.vcgtContents.f.vcgtRedMax = swap32(pVCGT->vcgtContents.f.vcgtRedMax);
@@ -752,6 +740,81 @@ wstring Profile::LoadFullProfile(bool forceReload) {
 			vcgtHeader.vcgtContents.f.vcgtBlueGamma = swap32(pVCGT->vcgtContents.f.vcgtBlueGamma);
 			vcgtHeader.vcgtContents.f.vcgtBlueMin = swap32(pVCGT->vcgtContents.f.vcgtBlueMin);
 			vcgtHeader.vcgtContents.f.vcgtBlueMax = swap32(pVCGT->vcgtContents.f.vcgtBlueMax);
+
+			// If the values look good, generate a LUT from the gamma formula
+			//
+#define MIN_GAMMA	0.2			// Arbitrary tests for validity ... gamma must be positive, but we'll hold
+#define MAX_GAMMA	5.0			//  it to 0.2 <= gamma <= 5.0 .  The 'minimum' value should be less than the 
+#define MAX_START	0.5			//  'maximum' value, and both must be between 0.0 and 1.0.  We further limit
+#define MIN_FINISH	0.5			//  the range to 0.0 <= min <= 0.5 and 0.5 <= max <= 1.0 .
+
+#define SYSTEM_GAMMA 2.2		// Some kind of fudge factor that I don't understand ...
+
+			double redGamma = double(vcgtHeader.vcgtContents.f.vcgtRedGamma) / double(65536);
+			double redMin = double(vcgtHeader.vcgtContents.f.vcgtRedMin) / double(65536);
+			double redMax = double(vcgtHeader.vcgtContents.f.vcgtRedMax) / double(65536);
+
+			double greenGamma = double(vcgtHeader.vcgtContents.f.vcgtGreenGamma) / double(65536);
+			double greenMin = double(vcgtHeader.vcgtContents.f.vcgtGreenMin) / double(65536);
+			double greenMax = double(vcgtHeader.vcgtContents.f.vcgtGreenMax) / double(65536);
+
+			double blueGamma = double(vcgtHeader.vcgtContents.f.vcgtBlueGamma) / double(65536);
+			double blueMin = double(vcgtHeader.vcgtContents.f.vcgtBlueMin) / double(65536);
+			double blueMax = double(vcgtHeader.vcgtContents.f.vcgtBlueMax) / double(65536);
+
+			if (	redGamma >= MIN_GAMMA	&& redGamma <= MAX_GAMMA	&&
+					redMin >= 0.0			&& redMin <= MAX_START		&&
+					redMax <= 1.0			&& redMax >= MIN_FINISH		&&
+					redMin < redMax										&&
+
+					greenGamma >= MIN_GAMMA	&& greenGamma <= MAX_GAMMA	&&
+					greenMin >= 0.0			&& greenMin <= MAX_START	&&
+					greenMax <= 1.0			&& greenMax >= MIN_FINISH	&&
+					greenMin < greenMax									&&
+
+					blueGamma >= MIN_GAMMA	&& blueGamma <= MAX_GAMMA	&&
+					blueMin >= 0.0			&& blueMin <= MAX_START		&&
+					blueMax <= 1.0			&& blueMax >= MIN_FINISH	&&
+					blueMin < blueMax
+			) {
+				pLUT = new LUT;
+				SecureZeroMemory(pLUT, sizeof(LUT));
+				double redScale = redMax - redMin;
+				double greenScale = greenMax - greenMin;
+				double blueScale = blueMax - blueMin;
+				redGamma *= SYSTEM_GAMMA;
+				greenGamma *= SYSTEM_GAMMA;
+				blueGamma *= SYSTEM_GAMMA;
+				int result;
+				for ( size_t i = 0; i < 256; ++i ) {
+					result = static_cast<int>( double(65536) * (redMin + redScale * pow( (double(i)/double(255)), redGamma)) );
+					if ( result < 0x0000 ) {
+						pLUT->red[i] = 0x0000;
+					} else if ( result > 0xFFFF ) {
+						pLUT->red[i] = 0xFFFF;
+					} else {
+						pLUT->red[i] = static_cast<WORD>(result);
+					}
+
+					result = static_cast<int>( double(65536) * (greenMin + greenScale * pow( (double(i)/double(255)), greenGamma)) );
+					if ( result < 0x0000 ) {
+						pLUT->green[i] = 0;
+					} else if ( result > 0xFFFF ) {
+						pLUT->green[i] = 0xFFFF;
+					} else {
+						pLUT->green[i] = static_cast<WORD>(result);
+					}
+
+					result = static_cast<int>( double(65536) * (blueMin + blueScale * pow( (double(i)/double(255)), blueGamma)) );
+					if ( result < 0x0000 ) {
+						pLUT->blue[i] = 0;
+					} else if ( result > 0xFFFF ) {
+						pLUT->blue[i] = 0xFFFF;
+					} else {
+						pLUT->blue[i] = static_cast<WORD>(result);
+					}
+				}
+			}
 		}
 	}
 
@@ -768,13 +831,7 @@ wstring Profile::LoadFullProfile(bool forceReload) {
 			return ErrorString;
 		}
 		BYTE * bigBuffer = new BYTE[TagTable[wcsProfileIndex].Size];
-
-//#pragma warning(push)
-//#pragma warning(disable:6011)	// warning C6011: Dereferencing NULL pointer 'TagTable': Lines: 78, 82, 86, ..., 173, 174, 175
-
 		bRet = ReadFile(hFile, bigBuffer, TagTable[wcsProfileIndex].Size, &cb, NULL);
-//#pragma warning(pop)
-
 		if (bRet) {
 			WCS_IN_ICC_HEADER * wiPtr = reinterpret_cast<WCS_IN_ICC_HEADER *>(bigBuffer);
 			DWORD siz;
@@ -1160,7 +1217,45 @@ LUT_COMPARISON Profile::CompareLUT(LUT * otherLUT, DWORD * maxError, DWORD * tot
 	// for linearity
 	//
 	if ( 0 == pLUT ) {
-		for (i = 0; i < 256; ++i) {
+		i = 0;
+		// Special-case our "signature" ... consider it linear
+		//
+		for (; i < 4; ++i) {
+			WORD linear8 = static_cast<WORD>(i << 8);			// Two versions of linearity
+			WORD linear16 = static_cast<WORD>(linear8 + i);
+			if ( (otherLUT->red[i] != linear8) && (otherLUT->red[i] != linear16) ) {
+				if ((1 == i && 0x0102 == otherLUT->red[i])	||
+					(2 == i && 0x0203 == otherLUT->red[i])	||
+					(3 == i && 0x0304 == otherLUT->red[i])
+				) {
+					;
+				} else {
+					otherLutIsLinear = false;
+					diff8 = (otherLUT->red[i] > linear8) ? (otherLUT->red[i] - linear8) : (linear8 - otherLUT->red[i]);
+					diff16 = (otherLUT->red[i] > linear16) ? (otherLUT->red[i] - linear16) : (linear16 - otherLUT->red[i]);
+					diff = (diff8 < diff16) ? diff8 : diff16;
+					max = (diff > max) ? diff : max;
+					total += diff;
+				}
+			}
+			if ( (otherLUT->green[i] != linear8) && (otherLUT->green[i] != linear16) ) {
+				otherLutIsLinear = false;
+				diff8 = (otherLUT->green[i] > linear8) ? (otherLUT->green[i] - linear8) : (linear8 - otherLUT->green[i]);
+				diff16 = (otherLUT->green[i] > linear16) ? (otherLUT->green[i] - linear16) : (linear16 - otherLUT->green[i]);
+				diff = (diff8 < diff16) ? diff8 : diff16;
+				max = (diff > max) ? diff : max;
+				total += diff;
+			}
+			if ( (otherLUT->blue[i] != linear8) && (otherLUT->blue[i] != linear16) ) {
+				otherLutIsLinear = false;
+				diff8 = (otherLUT->blue[i] > linear8) ? (otherLUT->blue[i] - linear8) : (linear8 - otherLUT->blue[i]);
+				diff16 = (otherLUT->blue[i] > linear16) ? (otherLUT->blue[i] - linear16) : (linear16 - otherLUT->blue[i]);
+				diff = (diff8 < diff16) ? diff8 : diff16;
+				max = (diff > max) ? diff : max;
+				total += diff;
+			}
+		}
+		for (; i < 256; ++i) {
 			WORD linear8 = static_cast<WORD>(i << 8);			// Two versions of linearity
 			WORD linear16 = static_cast<WORD>(linear8 + i);
 			if ( (otherLUT->red[i] != linear8) && (otherLUT->red[i] != linear16) ) {
@@ -1224,10 +1319,17 @@ LUT_COMPARISON Profile::CompareLUT(LUT * otherLUT, DWORD * maxError, DWORD * tot
 			total += diff;
 		}
 
-		// Check for linearity (either version)
+		// Check for linearity (either version), checking for our signature
 		//
 		if ( (pLUT->red[i] != linear8) && (pLUT->red[i] != linear16) ) {
-			thisLutIsLinear = false;
+			if ((1 == i && 0x0102 == pLUT->red[i])	||
+				(2 == i && 0x0203 == pLUT->red[i])	||
+				(3 == i && 0x0304 == pLUT->red[i])
+			) {
+				;
+			} else {
+				thisLutIsLinear = false;
+			}
 		}
 		if ( (pLUT->green[i] != linear8) && (pLUT->green[i] != linear16) ) {
 			thisLutIsLinear = false;
@@ -1236,7 +1338,14 @@ LUT_COMPARISON Profile::CompareLUT(LUT * otherLUT, DWORD * maxError, DWORD * tot
 			thisLutIsLinear = false;
 		}
 		if ( (otherLUT->red[i] != linear8) && (otherLUT->red[i] != linear16) ) {
-			otherLutIsLinear = false;
+			if ((1 == i && 0x0102 == otherLUT->red[i])	||
+				(2 == i && 0x0203 == otherLUT->red[i])	||
+				(3 == i && 0x0304 == otherLUT->red[i])
+			) {
+				;
+			} else {
+				otherLutIsLinear = false;
+			}
 		}
 		if ( (otherLUT->green[i] != linear8) && (otherLUT->green[i] != linear16) ) {
 			otherLutIsLinear = false;

@@ -53,13 +53,13 @@ END
 //
 
 IDD_SUMMARY_PAGE DIALOGEX 0, 0, 440, 225
-STYLE DS_SETFONT | DS_FIXEDSYS | WS_CHILD | WS_VISIBLE | WS_CAPTION
+STYLE DS_SETFONT | DS_FIXEDSYS | WS_CHILD | WS_VISIBLE | WS_CLIPCHILDREN | WS_CAPTION
 CAPTION "Summary"
 FONT 9, "Segoe UI", 400, 0, 0x0
 BEGIN
     LTEXT           "Hidden, original size",IDC_ORIGINAL_SIZE,4,4,430,217,NOT WS_VISIBLE
     LTEXT           "Hidden, resized",IDC_RESIZED,4,4,430,217,NOT WS_VISIBLE
-    PUSHBUTTON      "Load LUT",IDC_LOAD_BUTTON,380,208,52,14
+    PUSHBUTTON      "Load LUT",IDC_LOAD_BUTTON,381,208,52,14,NOT WS_VISIBLE | NOT WS_TABSTOP
 END
 
 IDD_MONITOR_PAGE DIALOGEX 0, 0, 440, 225
@@ -154,12 +154,12 @@ BEGIN
         BEGIN
             VALUE "CompanyName", "Tad Marshall"
             VALUE "FileDescription", "LUT Loader"
-            VALUE "FileVersion", "0, 0, 0, 1"
+            VALUE "FileVersion", "1, 0, 0, 0"
             VALUE "InternalName", "LUTLoader"
             VALUE "LegalCopyright", "Copyright © 2011 Tad Marshall"
             VALUE "OriginalFilename", "LUTLoader.exe"
             VALUE "ProductName", "LUT Loader"
-            VALUE "ProductVersion", "0, 0, 0, 1"
+            VALUE "ProductVersion", "1, 0, 0, 0"
         END
     END
     BLOCK "VarFileInfo"
@@ -187,6 +187,22 @@ IDI_BACKCOLOR           ICON                    "backcolo.ico"
 
 IDB_BITMAP1             BITMAP                  "Monitor bitmap from setupapi-dll.bmp"
 IDB_BITMAP2             BITMAP                  "Monitor bitmap from setupapi-dll 48x48.bmp"
+
+/////////////////////////////////////////////////////////////////////////////
+//
+// Menu
+//
+
+IDR_LUTVIEW_POPUP_MENU MENU 
+BEGIN
+	POPUP ""
+	BEGIN
+		MENUITEM "&White background",            ID_WHITEBACKGROUND
+		MENUITEM "&Black background",            ID_BLACKBACKGROUND
+		MENUITEM "&Gradient background",         ID_GRADIENTBACKGROUND
+	END
+END
+
 
 /////////////////////////////////////////////////////////////////////////////
 //

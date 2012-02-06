@@ -23,4 +23,4 @@ const wchar_t * LookupName(
 	const __in __ecount(tableSize) NAME_LOOKUP * nameTable,
 	DWORD tableSize,
 	DWORD identifier );
-HFONT GetFont(HDC hdc, FONT_CLASS fontClass);
+HFONT GetFont(HDC hdc, FONT_CLASS fontClass, bool newCopy = false);

@@ -7,6 +7,14 @@
 #include "Utility.h"
 #include <strsafe.h>
 
+// Optional "features"
+//
+#define SHOW_GAMMA_RAMP_IN_SUMMARY_STRING 1
+
+// Some constants
+//
+#define COUNT_OF_GAMMA_VALUES_TO_SHOW 10
+
 // Constructor
 //
 Monitor::Monitor(Adapter * hostAdapter, const DISPLAY_DEVICEW & displayMonitor) :
@@ -51,14 +59,24 @@ bool Monitor::ReadLutFromCard(void) {
 
 // Write a LUT (from any source) to the adapter
 //
-bool Monitor::WriteLutToCard(LUT * lutToWriteToWriteToAdapter) {
-	BOOL bRet = 0;
-	HDC hDC = CreateDC(adapter->GetDeviceName().c_str(), 0, 0, 0);
-	if (hDC) {
-		bRet = SetDeviceGammaRamp(hDC, lutToWriteToWriteToAdapter);
-		DeleteDC(hDC);
+bool Monitor::WriteLutToCard(LUT * lutToWriteToAdapter) {
+	if (lutToWriteToAdapter) {
+		BOOL bRet = 0;
+		HDC hDC = CreateDC(adapter->GetDeviceName().c_str(), 0, 0, 0);
+		if (hDC) {
+
+			// Try doing it twice with slightly different ramps ...
+			//
+			++lutToWriteToAdapter->red[0];
+			bRet = SetDeviceGammaRamp(hDC, lutToWriteToAdapter);
+			--lutToWriteToAdapter->red[0];
+			bRet = SetDeviceGammaRamp(hDC, lutToWriteToAdapter);
+			DeleteDC(hDC);
+		}
+		return ( 0 != bRet );
+	} else {
+		return false;
 	}
-	return ( 0 != bRet );
 }
 
 // Initialize
@@ -71,14 +89,12 @@ void Monitor::Initialize(void) {
 	//
 	wchar_t registryKey[512];
 	int len;
-	if (VistaOrHigher()) {
+	if ( VistaOrHigher() ) {
 
 		// Vista or higher, set up user profile, if any
 		//
 		len = lstrlenW(L"\\Registry\\Machine\\System\\CurrentControlSet\\Control\\Class");
-		wcscpy_s(
-			registryKey,
-			_countof(registryKey),
+		wcscpy_s( registryKey, _countof(registryKey),
 			L"Software\\Microsoft\\Windows NT\\CurrentVersion\\ICM\\ProfileAssociations\\Display");
 		wcscat_s(registryKey, _countof(registryKey), &DeviceKey.c_str()[len]);
 		UserProfile = Profile::GetAllProfiles(HKEY_CURRENT_USER, registryKey, &activeProfileIsUserProfile, UserProfileList);
@@ -160,90 +176,93 @@ wstring Monitor::SummaryString(void) const {
 			s += L"<No profiles>";
 		}
 	}
-	s += L"\r\n\r\n";
+	s += L"\r\n";
 
 	// See if the loaded LUT is correct
 	//
-	Profile * active = GetActiveProfile();
-	active->LoadFullProfile(false);
+	Profile * activeProfile = GetActiveProfile();
+	if (activeProfile) {
+		s += L"\r\n";
+		activeProfile->LoadFullProfile(false);
+		DWORD maxError = 0;
+		DWORD totalError = 0;
+		LUT_COMPARISON result = activeProfile->CompareLUT(pLUT, &maxError, &totalError);
+		switch (result) {
 
-	DWORD maxError = 0;
-	DWORD totalError = 0;
+			// LUTs match word for word
+			//
+			case LC_EQUAL:
+				s += L"The current LUT matches the active profile\r\n";
+				break;
 
-	LUT_COMPARISON result = active->CompareLUT(pLUT, &maxError, &totalError);
+			// One uses 0x0100, the other uses 0x0101 style
+			//
+			case LC_VARIATION_ON_LINEAR:
+				s += L"The current LUT and the active profile are linear\r\n";
+				break;
 
-	switch (result) {
+			// Low byte zeroed
+			//
+			case LC_TRUNCATION_IN_LOW_BYTE:
+				s += L"The current LUT is similar to the active profile (truncation)\r\n";
+				break;
 
-		// LUTs match word for word
-		//
-		case LC_EQUAL:
-			s += L"The current LUT matches the active profile\r\n";
-			break;
+			// Windows 7 rounds to nearest high byte
+			//
+			case LC_ROUNDING_IN_LOW_BYTE:
+				s += L"The current LUT is similar to the active profile (rounding)\r\n";
+				break;
 
-		// One uses 0x0100, the other uses 0x0101 style
-		//
-		case LC_VARIATION_ON_LINEAR:
-			s += L"The current LUT and the active profile are linear\r\n";
-			break;
+			// Match, given the circumstances
+			//
+			case LC_PROFILE_HAS_NO_LUT_OTHER_LINEAR:
+				s += L"The current LUT is linear and the active profile has no LUT\r\n";
+				break;
 
-		// Low byte zeroed
-		//
-		case LC_TRUNCATION_IN_LOW_BYTE:
-			s += L"The current LUT is similar to the active profile (truncation)\r\n";
-			break;
+			// Mismatch, other should be linear
+			//
+			case LC_PROFILE_HAS_NO_LUT_OTHER_NONLINEAR:
+				if ( activeProfile->HasEmbeddedWcsProfile() ) {
+					s += L"The active profile is a Windows Color System profile, and has no LUT\r\n";
+				} else {
+					s += L"The current LUT is not linear and the active profile has no LUT\r\n";
+				}
+				break;
 
-		// Windows 7 rounds to nearest high byte
-		//
-		case LC_ROUNDING_IN_LOW_BYTE:
-			s += L"The current LUT is similar to the active profile (rounding)\r\n";
-			break;
-
-		// Match, given the circumstances
-		//
-		case LC_PROFILE_HAS_NO_LUT_OTHER_LINEAR:
-			s += L"The current LUT is linear and the active profile has no LUT\r\n";
-			break;
-
-		// Mismatch, other should be linear
-		//
-		case LC_PROFILE_HAS_NO_LUT_OTHER_NONLINEAR:
-			if ( active->HasEmbeddedWcsProfile() ) {
-				s += L"The active profile is a Windows Color System profile, and has no LUT\r\n";
-			} else {
-				s += L"The current LUT is not linear and the active profile has no LUT\r\n";
-			}
-			break;
-
-		// LUTs do not meet any matching criteria
-		//
-		case LC_UNEQUAL:
-			s += L"The current LUT does not match the active profile\r\n";
-			break;
-
+			// LUTs do not meet any matching criteria
+			//
+			case LC_UNEQUAL:
+				s += L"The current LUT does not match the active profile\r\n";
+				break;
+		}
 	}
 
-#if 0
+#if SHOW_GAMMA_RAMP_IN_SUMMARY_STRING
+
 	// Display the start of the gamma ramp
 	//
-	s += L"    Start of gamma ramp:\r\n  Red   =";
-	for (int i = 0; i < 4; i++) {
+	s += L"\r\nStart of gamma ramp (first 10 entries):\r\n\tRed \t= ";
+	for (int i = 0; i < COUNT_OF_GAMMA_VALUES_TO_SHOW; i++) {
 		wchar_t buf[10];
 		StringCbPrintf(buf, sizeof(buf), L" %04X", pLUT->red[i]);
 		s += buf;
 	}
-	s += L"\r\n  Green =";
-	for (int i = 0; i < 4; i++) {
+	s += L" \r\n\tGreen\t= ";
+	for (int i = 0; i < COUNT_OF_GAMMA_VALUES_TO_SHOW; i++) {
 		wchar_t buf[10];
 		StringCbPrintf(buf, sizeof(buf), L" %04X", pLUT->green[i]);
 		s += buf;
 	}
-	s += L"\r\n  Blue  =";
-	for (int i = 0; i < 4; i++) {
+	s += L"\r\n\tBlue\t= ";
+	for (int i = 0; i < COUNT_OF_GAMMA_VALUES_TO_SHOW; i++) {
 		wchar_t buf[10];
 		StringCbPrintf(buf, sizeof(buf), L" %04X", pLUT->blue[i]);
 		s += buf;
 	}
+	s += L"\r\n";
+
 #endif
+
 	return s;
 }
 

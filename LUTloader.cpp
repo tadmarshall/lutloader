@@ -15,8 +15,9 @@
 #include <strsafe.h>
 #include <wingdi.h>
 
-#pragma comment(lib, "mscms.lib")
-#pragma comment(lib, "uxtheme.lib")
+#pragma comment(lib, "mscms.lib")					// For GetColorDirectory
+#pragma comment(lib, "uxtheme.lib")					// For OpenThemeData and other visual styles
+#pragma comment(lib, "msimg32.lib")					// For GradientFill
 
 // Global externs defined in this file
 //
@@ -85,14 +86,78 @@ void FetchMonitorInfo(void) {
 
 // Load LUTs from active profiles for all monitors
 //
-int LoadLUTs(void) {
+int LoadAllLUTs(void) {
+
+	size_t count = Monitor::GetListSize();
+	LUT linearLUT;
+	Monitor * monitor;
+	Profile * activeProfile;
+	LUT * pLUT;
+	if (count) {
+
+		// Create a linear LUT
+		//
+		for ( size_t i = 0; i < 256; ++i ) {
+			WORD linear16 = static_cast<WORD>( (i << 8) + i);
+			linearLUT.red[i] = linear16;
+			linearLUT.green[i] = linear16;
+			linearLUT.blue[i] = linear16;
+		}
+
+		// Add a "signature" to the linear LUT to help us detect other LUT loaders
+		//
+		linearLUT.red[1] = 0x0102;
+		linearLUT.red[2] = 0x0203;
+		linearLUT.red[3] = 0x0304;
+
+		// First, set the "screen" DC to linear
+		//
+		HDC hdc = GetDC(0);
+		if (hdc) {
+			++linearLUT.red[1];
+			SetDeviceGammaRamp(hdc, &linearLUT);
+			--linearLUT.red[1];
+			SetDeviceGammaRamp(hdc, &linearLUT);
+			ReleaseDC(0, hdc);
+		}
+
+		// Then set each of our individual monitors to its correct LUT
+		//
+		for ( size_t i = 0; i < count; ++i ) {
+			monitor = Monitor::Get(i);
+			activeProfile = monitor->GetActiveProfile();
+			activeProfile->LoadFullProfile(false);
+			pLUT = activeProfile->GetLutPointer();
+			if ( 0 == pLUT ) {
+				pLUT = &linearLUT;
+			}
+			monitor->WriteLutToCard(pLUT);
+		}
+	}
 
 	// TODO -- for now, just show a message box
 	//
-	wchar_t szCaption[256];
-	LoadString(g_hInst, IDS_CAPTION, szCaption, _countof(szCaption));
-	MessageBox(NULL, L"Load LUTs only", szCaption, MB_ICONINFORMATION | MB_OK);
+	//wchar_t szCaption[256];
+	//LoadString(g_hInst, IDS_CAPTION, szCaption, _countof(szCaption));
+	//MessageBox(NULL, L"Load LUTs only", szCaption, MB_ICONINFORMATION | MB_OK);
+
 	return 0;
+}
+
+// Load LUTs from active profiles for all monitors
+//
+int LoadLUTsAtStartup(void) {
+	int retVal = 0;
+
+	size_t count = Monitor::GetListSize();
+	if (count) {
+		//MessageBeep(MB_ICONEXCLAMATION);
+		//LoadAllLUTs();
+		Sleep(5000);
+		//MessageBeep(MB_ICONHAND);
+		retVal = LoadAllLUTs();
+	}
+	return retVal;
 }
 
 // Program entry point
@@ -145,7 +210,9 @@ int WINAPI WinMain(
 	//
 	int retval;
 	if (0 == strcmp(lpCmdLine, "/L")) {
-		retval = LoadLUTs();
+		retval = LoadAllLUTs();
+	} else if (0 == strcmp(lpCmdLine, "/S")) {
+		retval = LoadLUTsAtStartup();
 	} else {
 		retval = ShowPropertySheet(nShowCmd);
 	}

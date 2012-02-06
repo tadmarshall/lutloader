@@ -85,48 +85,113 @@ const wchar_t * LookupName(
 
 // Get a font based on a font class
 //
-HFONT GetFont(HDC hdc, FONT_CLASS fontClass) {
-	int fontPitch = 9;
-	int fontWeight = FW_NORMAL;
-	switch (fontClass) {
-		case FC_HEADING:
-			//fontPitch = 17;
-			//fontPitch = 14;
-			fontPitch = 12;
-			fontWeight = FW_NORMAL;
-			//fontWeight = FW_MEDIUM;
-			//fontWeight = FW_SEMIBOLD;
-			//fontWeight = FW_BOLD;
-			break;
+HFONT GetFont(HDC hdc, FONT_CLASS fontClass, bool newCopy) {
+	if (newCopy) {
+		int fontPitch;
+		int fontWeight;
 
-		case FC_FILENAME:
-			fontPitch = 11;
-			fontWeight = FW_NORMAL;
-			//fontWeight = FW_MEDIUM;
-			//fontWeight = FW_SEMIBOLD;
-			//fontWeight = FW_BOLD;
-			break;
+		switch (fontClass) {
 
-		case FC_INFORMATION:
-			fontPitch = 9;
-			fontWeight = FW_NORMAL;
-			break;
+			case FC_HEADING:
+				fontPitch = 12;
+				fontWeight = FW_NORMAL;
+				break;
+
+			case FC_FILENAME:
+				fontPitch = 11;
+				fontWeight = FW_NORMAL;
+				break;
+
+			default:
+			case FC_INFORMATION:
+				fontPitch = 9;
+				fontWeight = FW_NORMAL;
+				break;
+		}
+		int nHeight = -MulDiv(fontPitch, GetDeviceCaps(hdc, LOGPIXELSY), 72);
+		return CreateFont(
+			nHeight,					// height
+			0,							// width
+			0,							// escapement
+			0,							// orientation
+			fontWeight,					// weight
+			FALSE,						// italic
+			FALSE,						// underline
+			FALSE,						// strikeout
+			ANSI_CHARSET,				// character set
+			OUT_OUTLINE_PRECIS,			// output precision (want outline font)
+			CLIP_DEFAULT_PRECIS,		// clipping precision
+			CLEARTYPE_QUALITY,			// quality
+			FF_SWISS,					// font family
+			L"Segoe UI" );				// face name
+	} else {
+		static HFONT fontHeading;
+		static HFONT fontFilename;
+		static HFONT fontInformation;
+
+		int fontPitch;
+		int fontWeight;
+
+		switch (fontClass) {
+
+			case FC_HEADING:
+				if (fontHeading) {
+					return fontHeading;
+				}
+				fontPitch = 12;
+				fontWeight = FW_NORMAL;
+				break;
+
+			case FC_FILENAME:
+				if (fontFilename) {
+					return fontFilename;
+				}
+				fontPitch = 11;
+				fontWeight = FW_NORMAL;
+				break;
+
+			default:
+			case FC_INFORMATION:
+				if (fontInformation) {
+					return fontInformation;
+				}
+				fontPitch = 9;
+				fontWeight = FW_NORMAL;
+				break;
+		}
+		int nHeight = -MulDiv(fontPitch, GetDeviceCaps(hdc, LOGPIXELSY), 72);
+		HFONT hFont = CreateFont(
+			nHeight,					// height
+			0,							// width
+			0,							// escapement
+			0,							// orientation
+			fontWeight,					// weight
+			FALSE,						// italic
+			FALSE,						// underline
+			FALSE,						// strikeout
+			ANSI_CHARSET,				// character set
+			OUT_OUTLINE_PRECIS,			// output precision (want outline font)
+			CLIP_DEFAULT_PRECIS,		// clipping precision
+			CLEARTYPE_QUALITY,			// quality
+			FF_SWISS,					// font family
+			L"Segoe UI" );				// face name
+
+		switch (fontClass) {
+
+			case FC_HEADING:
+				fontHeading = hFont;
+				break;
+
+			case FC_FILENAME:
+				fontFilename = hFont;
+				break;
+
+			default:
+			case FC_INFORMATION:
+				fontInformation = hFont;
+				break;
+
+		}
+		return hFont;
 	}
-	int nHeight = -MulDiv(fontPitch, GetDeviceCaps(hdc, LOGPIXELSY), 72);
-	return CreateFont(
-		nHeight,					// height
-		0,							// width
-		0,							// escapement
-		0,							// orientation
-		fontWeight,					// weight
-		FALSE,						// italic
-		FALSE,						// underline
-		FALSE,						// strikeout
-		ANSI_CHARSET,				// character set
-		OUT_OUTLINE_PRECIS,			// output precision (want outline font)
-		CLIP_DEFAULT_PRECIS,		// clipping precision
-		CLEARTYPE_QUALITY,			// quality
-		FF_SWISS,					// font family
-		//L"Tahoma" );				// face name
-		L"Segoe UI" );				// face name
 }
