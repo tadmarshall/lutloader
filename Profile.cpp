@@ -9,7 +9,7 @@
 #include <strsafe.h>
 
 extern wchar_t * ColorDirectory;
-	extern wchar_t * ColorDirectoryErrorString;
+extern wchar_t * ColorDirectoryErrorString;
 
 // Reverse engineered embedded WCS profile header
 //
@@ -130,8 +130,6 @@ const NAME_LOOKUP renderingIntents[] = {
 Profile::Profile(const wchar_t * profileName) :
 		ProfileName(profileName),
 		loaded(false),
-		Index(-1),
-		RefCount(1),
 		ProfileHeader(0),
 		TagCount(0),
 		TagTable(0),
@@ -161,30 +159,21 @@ Profile::~Profile() {
 	}
 }
 
-// AddRef
-//
-void Profile::AddRef(void) {
-	++RefCount;
-}
-
 // Vector of profiles
 //
 static vector <Profile *> profileList;
 
 // Add a profile to the list if it isn't already on it -- if it is already on the list,
-// bump up the reference count, delete the profile we were passed, and return a
-// pointer to the one we found on the list.
+// delete the profile we were passed, and return a pointer to the one we found on the list.
 //
 Profile * Profile::Add(Profile * profile) {
 	size_t index = profileList.size();
 	for (size_t i = 0; i < index; ++i) {
 		if ( profile->ProfileName == profileList[i]->ProfileName ) {
-			profileList[i]->AddRef();
 			delete profile;
 			return profileList[i];
 		}
 	}
-	profile->Index = static_cast<int>(index);
 	profileList.push_back(profile);
 	return profile;
 }

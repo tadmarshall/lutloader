@@ -138,6 +138,8 @@ void Resize::SetupForResizing(HWND parentBase) {
 
 void Resize::MainWindowHasResized(const WINDOWPOS & windowPos) {
 
+	RECT nr;
+
 	// Compute delta for sizing and moving
 	//
 	SIZE parentSizeDelta;
@@ -162,20 +164,22 @@ void Resize::MainWindowHasResized(const WINDOWPOS & windowPos) {
 	DWORD err = GetLastError();
 	for (vector<RESIZECHILD>::iterator cl = it->childList.begin(); hdwp && !err && (cl != it->childList.end()); ++cl) {
 		RESIZECHILD * rc = &(*cl);
-		hdwp = DeferWindowPos( hdwp, rc->hwnd, 0,
-				rc->rect.left + ( (rc->anchorRight && !rc->anchorLeft) ? parentSizeDelta.cx : 0 ),
-				rc->rect.top  + ( (rc->anchorBottom && !rc->anchorTop) ? parentSizeDelta.cy : 0 ),
-				rc->rect.right - rc->rect.left + ( (rc->anchorLeft && rc->anchorRight) ? parentSizeDelta.cx : 0 ),
-				rc->rect.bottom - rc->rect.top + ( (rc->anchorTop && rc->anchorBottom) ? parentSizeDelta.cy : 0 ),
-				SWP_NOACTIVATE | SWP_NOCOPYBITS | SWP_NOOWNERZORDER | SWP_NOREDRAW | SWP_NOZORDER );
-		err = GetLastError();
-		if (!err) {
-			rc->rect.left += ( (rc->anchorRight && !rc->anchorLeft) ? parentSizeDelta.cx : 0 );
-			rc->rect.top  += ( (rc->anchorBottom && !rc->anchorTop) ? parentSizeDelta.cy : 0 );
-			rc->rect.right  += rc->anchorRight  ? parentSizeDelta.cx : 0 ;
-			rc->rect.bottom += rc->anchorBottom ? parentSizeDelta.cy : 0 ;
+		nr.left = rc->rect.left + ( (rc->anchorRight && !rc->anchorLeft) ? parentSizeDelta.cx : 0 );
+		nr.top  = rc->rect.top  + ( (rc->anchorBottom && !rc->anchorTop) ? parentSizeDelta.cy : 0 );
+		nr.right  = rc->rect.right  + (rc->anchorRight  ? parentSizeDelta.cx : 0 );
+		nr.bottom = rc->rect.bottom + (rc->anchorBottom ? parentSizeDelta.cy : 0 );
+		if ( !EqualRect(&nr, &rc->rect) ) {
+			hdwp = DeferWindowPos( hdwp, rc->hwnd, 0,
+					rc->rect.left + ( (rc->anchorRight && !rc->anchorLeft) ? parentSizeDelta.cx : 0 ),
+					rc->rect.top  + ( (rc->anchorBottom && !rc->anchorTop) ? parentSizeDelta.cy : 0 ),
+					rc->rect.right - rc->rect.left + ( (rc->anchorLeft && rc->anchorRight) ? parentSizeDelta.cx : 0 ),
+					rc->rect.bottom - rc->rect.top + ( (rc->anchorTop && rc->anchorBottom) ? parentSizeDelta.cy : 0 ),
+					SWP_NOACTIVATE | SWP_NOCOPYBITS | SWP_NOOWNERZORDER | SWP_NOZORDER );
+			err = GetLastError();
+			if (!err) {
+				rc->rect = nr;
+			}
 		}
-		InvalidateRect(rc->hwnd, NULL, TRUE);
 	}
 	if (hdwp) {
 		BOOL retVal = EndDeferWindowPos(hdwp);
@@ -186,7 +190,6 @@ void Resize::MainWindowHasResized(const WINDOWPOS & windowPos) {
 			wchar_t errorMessageCaption[256];
 			LoadString(g_hInst, IDS_ERROR, errorMessageCaption, _countof(errorMessageCaption));
 			MessageBox(NULL, s.c_str(), errorMessageCaption, MB_ICONINFORMATION | MB_OK);
-			InvalidateRect(topWindow, NULL, TRUE);
 			return;
 		}
 	}
@@ -201,20 +204,22 @@ void Resize::MainWindowHasResized(const WINDOWPOS & windowPos) {
 		err = GetLastError();
 		for (vector<RESIZECHILD>::iterator cl = it->childList.begin(); hdwp && !err && (cl != it->childList.end()); ++cl) {
 			RESIZECHILD * rc = &(*cl);
-			hdwp = DeferWindowPos( hdwp, rc->hwnd, 0,
-					rc->rect.left + ( (rc->anchorRight && !rc->anchorLeft) ? parentSizeDelta.cx : 0 ),
-					rc->rect.top  + ( (rc->anchorBottom && !rc->anchorTop) ? parentSizeDelta.cy : 0 ),
-					rc->rect.right - rc->rect.left + ( (rc->anchorLeft && rc->anchorRight) ? parentSizeDelta.cx : 0 ),
-					rc->rect.bottom - rc->rect.top + ( (rc->anchorTop && rc->anchorBottom) ? parentSizeDelta.cy : 0 ),
-					SWP_NOACTIVATE | SWP_NOCOPYBITS | SWP_NOOWNERZORDER | SWP_NOREDRAW | SWP_NOZORDER );
-			err = GetLastError();
-			if (!err) {
-				rc->rect.left += ( (rc->anchorRight && !rc->anchorLeft) ? parentSizeDelta.cx : 0 );
-				rc->rect.top  += ( (rc->anchorBottom && !rc->anchorTop) ? parentSizeDelta.cy : 0 );
-				rc->rect.right  += rc->anchorRight  ? parentSizeDelta.cx : 0 ;
-				rc->rect.bottom += rc->anchorBottom ? parentSizeDelta.cy : 0 ;
+			nr.left = rc->rect.left + ( (rc->anchorRight && !rc->anchorLeft) ? parentSizeDelta.cx : 0 );
+			nr.top  = rc->rect.top  + ( (rc->anchorBottom && !rc->anchorTop) ? parentSizeDelta.cy : 0 );
+			nr.right  = rc->rect.right  + ( rc->anchorRight  ? parentSizeDelta.cx : 0 );
+			nr.bottom = rc->rect.bottom + ( rc->anchorBottom ? parentSizeDelta.cy : 0 );
+			if ( !EqualRect(&nr, &rc->rect) ) {
+				hdwp = DeferWindowPos( hdwp, rc->hwnd, 0,
+						rc->rect.left + ( (rc->anchorRight && !rc->anchorLeft) ? parentSizeDelta.cx : 0 ),
+						rc->rect.top  + ( (rc->anchorBottom && !rc->anchorTop) ? parentSizeDelta.cy : 0 ),
+						rc->rect.right - rc->rect.left + ( (rc->anchorLeft && rc->anchorRight) ? parentSizeDelta.cx : 0 ),
+						rc->rect.bottom - rc->rect.top + ( (rc->anchorTop && rc->anchorBottom) ? parentSizeDelta.cy : 0 ),
+						SWP_NOACTIVATE | SWP_NOCOPYBITS | SWP_NOOWNERZORDER | SWP_NOZORDER );
+				err = GetLastError();
+				if (!err) {
+					rc->rect = nr;
+				}
 			}
-			InvalidateRect(rc->hwnd, NULL, TRUE);
 		}
 		if (hdwp) {
 			BOOL retVal = EndDeferWindowPos(hdwp);
@@ -228,7 +233,6 @@ void Resize::MainWindowHasResized(const WINDOWPOS & windowPos) {
 			}
 		}
 	}
-	InvalidateRect(topWindow, NULL, TRUE);
 }
 
 // Clear the list of Resize objects

@@ -10,7 +10,7 @@
 
 // Optional "features"
 //
-#define SHOW_PAINT_COUNT 1
+#define SHOW_PAINT_COUNT 0
 
 // Some constants
 //
@@ -104,8 +104,20 @@ LUTview::LUTview(wstring text, LUT_GRAPH_DISPLAY_STYLE displayStyle, bool userCo
 		pLUT(0),
 		graphDisplayStyle(displayStyle),
 		userCanChangeDisplayMode(userControl),
+		offscreenDC(0),
+		offscreenBitmap(0),
+		oldBitmap(),
+		updateBitmap(true),
 		paintCount(0)
 {
+	innerRect.left = 0;
+	innerRect.top = 0;
+	innerRect.right = 0;
+	innerRect.bottom = 0;
+	outerRect.left = 0;
+	outerRect.top = 0;
+	outerRect.right = 0;
+	outerRect.bottom = 0;
 }
 
 // Destructor
@@ -114,13 +126,22 @@ LUTview::~LUTview() {
 	if (pLUT) {
 		delete [] pLUT;
 	}
+	if (offscreenDC) {
+		if (oldBitmap) {
+			SelectObject(offscreenDC, oldBitmap);
+		}
+		if (offscreenBitmap) {
+			DeleteObject(offscreenBitmap);
+		}
+		DeleteDC(offscreenDC);
+	}
 }
 
-// Vector of adapters
+// Vector of LUTviews
 //
 static vector <LUTview *> lutViewList;
 
-// Add an adapter to the end of the list
+// Add a LUTview to the end of the list
 //
 LUTview * LUTview::Add(LUTview * newView) {
 	lutViewList.push_back(newView);
@@ -165,9 +186,9 @@ LRESULT CALLBACK LUTview::LUTviewWndProc(HWND hWnd, UINT uMessage, WPARAM wParam
 			BeginPaint(hWnd, &ps);
 			if (thisView->pLUT) {
 				++thisView->paintCount;
-				thisView->DrawImageOnDC(ps.hdc);
+				thisView->PaintGraphOnScreenDC(ps.hdc);
 			} else {
-				thisView->DrawNoLutTextOnDC(ps.hdc);
+				thisView->PaintNoLutTextOnScreenDC(ps.hdc);
 			}
 			EndPaint(hWnd, &ps);
 			return 0;
@@ -198,7 +219,8 @@ LRESULT CALLBACK LUTview::LUTviewWndProc(HWND hWnd, UINT uMessage, WPARAM wParam
 					int id = TrackPopupMenu(hPopup, flags, pt.x, pt.y, 0, hWnd, NULL);
 					if ( id >= ID_WHITEBACKGROUND && id <= ID_GRADIENTBACKGROUND ) {
 						thisView->graphDisplayStyle = static_cast<LUT_GRAPH_DISPLAY_STYLE>(id - ID_WHITEBACKGROUND);
-						InvalidateRect(hWnd, NULL, TRUE);
+						thisView->updateBitmap = true;
+						InvalidateRect(hWnd, &thisView->innerRect, FALSE);
 					}
 					DestroyMenu(hMenu);
 				}
@@ -215,7 +237,7 @@ void LUTview::RegisterWindowClass(void) {
 	WNDCLASSEX wc;
 	SecureZeroMemory(&wc, sizeof(wc));
 	wc.cbSize = sizeof(wc);
-	wc.style = CS_HREDRAW | CS_VREDRAW | CS_PARENTDC;
+	wc.style = CS_VREDRAW | CS_HREDRAW;
 	wc.lpfnWndProc = LUTview::LUTviewWndProc;
 	wc.cbClsExtra = 0;
 	wc.cbWndExtra = sizeof(LUTview *);
@@ -242,8 +264,7 @@ HWND LUTview::CreateLUTviewWindow(
 			WS_EX_NOPARENTNOTIFY,
 			LutViewClassName,
 			displayText.c_str(),
-			WS_CHILD | WS_GROUP | WS_VISIBLE | WS_CLIPSIBLINGS,
-			//WS_CHILD | WS_GROUP | WS_VISIBLE,
+			WS_CHILD | WS_GROUP | WS_VISIBLE,
 			x,
 			y,
 			width,
@@ -271,7 +292,17 @@ void LUTview::SetLUT(LUT * lutPointer) {
 	}
 }
 
-void LUTview::DrawImageOnDC(HDC hdc) {
+void LUTview::SetUpdateBitmap(void) {
+	updateBitmap = true;
+}
+
+RECT * LUTview::GetGraphRect(void) {
+	return &innerRect;
+}
+
+// This could draw to the screen, but we use it to draw to an offscreen bitmap/DC
+//
+void LUTview::DrawGraphOnDC(HDC hdc, RECT * targetRect) {
 	SIZE headingSize;
 	RECT headingRect;
 	int clipped;
@@ -291,31 +322,6 @@ void LUTview::DrawImageOnDC(HDC hdc) {
 		return;
 	}
 
-	// Compute the largest square that fits within our rect, centered
-	//
-	//RECT outerRect;
-	//RECT innerRect;
-	GetClientRect(hwnd, &outerRect);
-	if (outerRect.right < outerRect.bottom) {
-
-		// Too tall, center ourselves vertically
-		//
-		innerRect.left = 0;
-		innerRect.top = (outerRect.bottom - outerRect.right) / 2;
-		innerRect.right = outerRect.right;
-		innerRect.bottom = innerRect.top + outerRect.right;
-	} else if (outerRect.right > outerRect.bottom) {
-
-		// Too wide, center ourselves horizontally
-		//
-		innerRect.left = (outerRect.right - outerRect.bottom) / 2;
-		innerRect.top = 0;
-		innerRect.right = innerRect.left + outerRect.bottom;
-		innerRect.bottom = outerRect.bottom;
-	} else {
-		innerRect = outerRect;
-	}
-
 	// Fetch the heading text and compute its size and rectangle.  We wait until the
 	// end to draw it, but we want to avoid clipping it with gridlines
 	//
@@ -323,7 +329,6 @@ void LUTview::DrawImageOnDC(HDC hdc) {
 
 #if SHOW_PAINT_COUNT
 	wchar_t buf2[128];
-	//StringCbPrintf(buf2, sizeof(buf2), L"\nPaint count == %u", paintCount);
 	StringCbPrintf(buf2, sizeof(buf2), L" -- paint count == %u", paintCount);
 	StringCbCat(buf, sizeof(buf), buf2);
 #endif
@@ -335,42 +340,38 @@ void LUTview::DrawImageOnDC(HDC hdc) {
 	int graphCaptionIndentX = static_cast<int>(GRAPH_CAPTION_INDENT_X * dpiScale);
 	int graphCaptionIndentY = static_cast<int>(GRAPH_CAPTION_INDENT_Y * dpiScale);
 
-	headingRect.left = innerRect.left + graphCaptionIndentX;
-	headingRect.top = innerRect.top + graphCaptionIndentY;
+	headingRect.left = targetRect->left + graphCaptionIndentX;
+	headingRect.top = targetRect->top + graphCaptionIndentY;
 	headingRect.right = headingRect.left + headingSize.cx;
 	headingRect.bottom = headingRect.top + headingSize.cy;
-
-	// This will cause flicker, so fix it ...
-	//
-	FillRect(hdc, &outerRect, (HBRUSH)GetStockObject(WHITE_BRUSH));
 
 	// Draw the background
 	//
 	if ( LGDS_GRADIENT == graphDisplayStyle ) {
 		TRIVERTEX t[4];
-		t[0].x = innerRect.left + 1;		// Upper left corner
-		t[0].y = innerRect.top + 1;
+		t[0].x = targetRect->left + 1;		// Upper left corner
+		t[0].y = targetRect->top + 1;
 		t[0].Red = 128 << 8;
 		t[0].Green = 128 << 8;
 		t[0].Blue = 128 << 8;
 		t[0].Alpha = 255 << 8;
 
-		t[1].x = innerRect.right - 1;		// Upper right corner
-		t[1].y = innerRect.top + 1;
+		t[1].x = targetRect->right - 1;		// Upper right corner
+		t[1].y = targetRect->top + 1;
 		t[1].Red = 255 << 8;
 		t[1].Green = 255 << 8;
 		t[1].Blue = 255 << 8;
 		t[1].Alpha = 255 << 8;
 
-		t[2].x = innerRect.right - 1;		// Lower right corner
-		t[2].y = innerRect.bottom - 1;
+		t[2].x = targetRect->right - 1;		// Lower right corner
+		t[2].y = targetRect->bottom - 1;
 		t[2].Red = 128 << 8;
 		t[2].Green = 128 << 8;
 		t[2].Blue = 128 << 8;
 		t[2].Alpha = 255 << 8;
 
-		t[3].x = innerRect.left + 1;		// Lower left corner
-		t[3].y = innerRect.bottom - 1;
+		t[3].x = targetRect->left + 1;		// Lower left corner
+		t[3].y = targetRect->bottom - 1;
 		t[3].Red = 0 << 8;
 		t[3].Green = 0 << 8;
 		t[3].Blue = 0 << 8;
@@ -388,17 +389,17 @@ void LUTview::DrawImageOnDC(HDC hdc) {
 		GradientFill(hdc, t, _countof(t), g, _countof(g), GRADIENT_FILL_TRIANGLE);
 	} else {
 		HBRUSH hBrushBackground = CreateSolidBrush(styleTable[graphDisplayStyle].background);
-		FillRect(hdc, &innerRect, hBrushBackground);
+		FillRect(hdc, targetRect, hBrushBackground);
 		DeleteObject(hBrushBackground);
 	}
 
 	// Maybe draw crosshatch lines
 	//
 	if ( styleTable[graphDisplayStyle].gridlineCount ) {
-		int gridLeft = innerRect.left;
-		int gridTop = innerRect.top;
-		int gridRight = innerRect.right;
-		int gridBottom = innerRect.bottom;
+		int gridLeft = targetRect->left;
+		int gridTop = targetRect->top;
+		int gridRight = targetRect->right;
+		int gridBottom = targetRect->bottom;
 		int gridVerticalMidpoint2 = (gridTop + gridBottom) / 2;
 		int gridHorizontalMidpoint2 = (gridLeft + gridRight) / 2;
 		int gridVerticalMidpoint1 = (gridTop + gridVerticalMidpoint2) / 2;
@@ -554,8 +555,8 @@ void LUTview::DrawImageOnDC(HDC hdc) {
 
 	// Compute scaling for graph
 	//
-	double xFactor = ( (innerRect.right - innerRect.left - 2) / double(255) );
-	double yFactor = ( (innerRect.bottom - innerRect.top - 2) / double(65535) );
+	double xFactor = ( (targetRect->right - targetRect->left - 2) / double(255) );
+	double yFactor = ( (targetRect->bottom - targetRect->top - 2) / double(65535) );
 
 	// Try merging colors (works best on a black background, useless on white)
 	//
@@ -572,17 +573,17 @@ void LUTview::DrawImageOnDC(HDC hdc) {
 		oldPen = SelectObject(hdc, redPen);
 	}
 	for (size_t i = 0; i < 256; ++i) {
-		pt[i].x = innerRect.left + (int)(xFactor * double(i) + 0.49) + 1;
-		if ( pt[i].x < (innerRect.left + 1) ) {
-			pt[i].x = (innerRect.left + 1);
-		} else if ( pt[i].x > (innerRect.right - 1) ) {
-			pt[i].x = (innerRect.right - 1);
+		pt[i].x = targetRect->left + (int)(xFactor * double(i) + 0.49) + 1;
+		if ( pt[i].x < (targetRect->left + 1) ) {
+			pt[i].x = (targetRect->left + 1);
+		} else if ( pt[i].x > (targetRect->right - 1) ) {
+			pt[i].x = (targetRect->right - 1);
 		}
-		pt[i].y = innerRect.bottom - (int)(yFactor * double(pLUT->red[i]) + 0.49) - 2;
-		if ( pt[i].y < (innerRect.top) ) {
-			pt[i].y = (innerRect.top);
-		} else if ( pt[i].y > (innerRect.bottom - 1) ) {
-			pt[i].y = (innerRect.bottom - 1);
+		pt[i].y = targetRect->bottom - (int)(yFactor * double(pLUT->red[i]) + 0.49) - 2;
+		if ( pt[i].y < (targetRect->top) ) {
+			pt[i].y = (targetRect->top);
+		} else if ( pt[i].y > (targetRect->bottom - 1) ) {
+			pt[i].y = (targetRect->bottom - 1);
 		}
 	}
 	Polyline(hdc, pt, 256);
@@ -592,17 +593,17 @@ void LUTview::DrawImageOnDC(HDC hdc) {
 	HGDIOBJ greenPen = CreatePen(PS_SOLID, 0, styleTable[graphDisplayStyle].green);
 	SelectObject(hdc, greenPen);
 	for (size_t i = 0; i < 256; ++i) {
-		pt[i].x = innerRect.left + (int)(xFactor * double(i) + 0.49) + 1;
-		if ( pt[i].x < (innerRect.left + 1) ) {
-			pt[i].x = (innerRect.left + 1);
-		} else if ( pt[i].x > (innerRect.right - 1) ) {
-			pt[i].x = (innerRect.right - 1);
+		pt[i].x = targetRect->left + (int)(xFactor * double(i) + 0.49) + 1;
+		if ( pt[i].x < (targetRect->left + 1) ) {
+			pt[i].x = (targetRect->left + 1);
+		} else if ( pt[i].x > (targetRect->right - 1) ) {
+			pt[i].x = (targetRect->right - 1);
 		}
-		pt[i].y = innerRect.bottom - (int)(yFactor * double(pLUT->green[i]) + 0.49) - 2;
-		if ( pt[i].y < (innerRect.top) ) {
-			pt[i].y = (innerRect.top);
-		} else if ( pt[i].y > (innerRect.bottom - 1) ) {
-			pt[i].y = (innerRect.bottom - 1);
+		pt[i].y = targetRect->bottom - (int)(yFactor * double(pLUT->green[i]) + 0.49) - 2;
+		if ( pt[i].y < (targetRect->top) ) {
+			pt[i].y = (targetRect->top);
+		} else if ( pt[i].y > (targetRect->bottom - 1) ) {
+			pt[i].y = (targetRect->bottom - 1);
 		}
 	}
 	Polyline(hdc, pt, 256);
@@ -612,17 +613,17 @@ void LUTview::DrawImageOnDC(HDC hdc) {
 	HGDIOBJ bluePen = CreatePen(PS_SOLID, 0, styleTable[graphDisplayStyle].blue);
 	SelectObject(hdc, bluePen);
 	for (size_t i = 0; i < 256; ++i) {
-		pt[i].x = innerRect.left + (int)(xFactor * double(i) + 0.49) + 1;
-		if ( pt[i].x < (innerRect.left + 1) ) {
-			pt[i].x = (innerRect.left + 1);
-		} else if ( pt[i].x > (innerRect.right - 1) ) {
-			pt[i].x = (innerRect.right - 1);
+		pt[i].x = targetRect->left + (int)(xFactor * double(i) + 0.49) + 1;
+		if ( pt[i].x < (targetRect->left + 1) ) {
+			pt[i].x = (targetRect->left + 1);
+		} else if ( pt[i].x > (targetRect->right - 1) ) {
+			pt[i].x = (targetRect->right - 1);
 		}
-		pt[i].y = innerRect.bottom - (int)(yFactor * double(pLUT->blue[i]) + 0.49) - 2;
-		if ( pt[i].y < (innerRect.top) ) {
-			pt[i].y = (innerRect.top);
-		} else if ( pt[i].y > (innerRect.bottom - 1) ) {
-			pt[i].y = (innerRect.bottom - 1);
+		pt[i].y = targetRect->bottom - (int)(yFactor * double(pLUT->blue[i]) + 0.49) - 2;
+		if ( pt[i].y < (targetRect->top) ) {
+			pt[i].y = (targetRect->top);
+		} else if ( pt[i].y > (targetRect->bottom - 1) ) {
+			pt[i].y = (targetRect->bottom - 1);
 		}
 	}
 	Polyline(hdc, pt, 256);
@@ -633,20 +634,20 @@ void LUTview::DrawImageOnDC(HDC hdc) {
 
 	// Draw a frame
 	//
-	pt[0].x = innerRect.left;
-	pt[0].y = innerRect.top;
+	pt[0].x = targetRect->left;
+	pt[0].y = targetRect->top;
 
-	pt[1].x = innerRect.left;
-	pt[1].y = innerRect.bottom - 1;
+	pt[1].x = targetRect->left;
+	pt[1].y = targetRect->bottom - 1;
 
-	pt[2].x = innerRect.right - 1;
-	pt[2].y = innerRect.bottom - 1;
+	pt[2].x = targetRect->right - 1;
+	pt[2].y = targetRect->bottom - 1;
 
-	pt[3].x = innerRect.right - 1;
-	pt[3].y = innerRect.top;
+	pt[3].x = targetRect->right - 1;
+	pt[3].y = targetRect->top;
 
-	pt[4].x = innerRect.left;
-	pt[4].y = innerRect.top;
+	pt[4].x = targetRect->left;
+	pt[4].y = targetRect->top;
 
 	HGDIOBJ framePen = CreatePen(PS_SOLID, 0, styleTable[graphDisplayStyle].frame);
 	SelectObject(hdc, framePen);
@@ -676,20 +677,14 @@ void LUTview::DrawImageOnDC(HDC hdc) {
 	DeleteObject(framePen);
 }
 
-void LUTview::DrawNoLutTextOnDC(HDC hdc) {
-	SIZE headingSize;
-	RECT rect;
-	GetClientRect(hwnd, &rect);
-	wstring s;
-	wchar_t buf[1024];
-	HFONT hFont;
-	HGDIOBJ oldFont;
+void LUTview::PaintGraphOnScreenDC(HDC hdc) {
+
+	RECT oldInnerRect = innerRect;
 
 	// Compute the largest square that fits within our rect, centered
 	//
-	//RECT outerRect;
-	//RECT innerRect;
 	GetClientRect(hwnd, &outerRect);
+	RECT rect = outerRect;
 	if (outerRect.right < outerRect.bottom) {
 
 		// Too tall, center ourselves vertically
@@ -698,6 +693,18 @@ void LUTview::DrawNoLutTextOnDC(HDC hdc) {
 		innerRect.top = (outerRect.bottom - outerRect.right) / 2;
 		innerRect.right = outerRect.right;
 		innerRect.bottom = innerRect.top + outerRect.right;
+
+		rect.bottom = innerRect.top;
+		if (RectVisible(hdc, &rect)) {
+			FillRect(hdc, &rect, (HBRUSH)GetStockObject(WHITE_BRUSH));
+		}
+
+		rect.top = innerRect.bottom;
+		rect.bottom = outerRect.bottom;
+		if (RectVisible(hdc, &rect)) {
+			FillRect(hdc, &rect, (HBRUSH)GetStockObject(WHITE_BRUSH));
+		}
+
 	} else if (outerRect.right > outerRect.bottom) {
 
 		// Too wide, center ourselves horizontally
@@ -706,67 +713,200 @@ void LUTview::DrawNoLutTextOnDC(HDC hdc) {
 		innerRect.top = 0;
 		innerRect.right = innerRect.left + outerRect.bottom;
 		innerRect.bottom = outerRect.bottom;
+
+		rect.right = innerRect.left;
+		if (RectVisible(hdc, &rect)) {
+			FillRect(hdc, &rect, (HBRUSH)GetStockObject(WHITE_BRUSH));
+		}
+
+		rect.left = innerRect.right;
+		rect.right = outerRect.right;
+		if (RectVisible(hdc, &rect)) {
+			FillRect(hdc, &rect, (HBRUSH)GetStockObject(WHITE_BRUSH));
+		}
+
 	} else {
 		innerRect = outerRect;
 	}
 
-	// Draw the background
+	// Do we need a new bitmap, or can we just BitBlt the old one?
 	//
-	//FillRect(hdc, &innerRect, (HBRUSH)GetStockObject(BLACK_BRUSH));
+	SIZE newSize;
+	newSize.cx = innerRect.right - innerRect.left;
+	newSize.cy = innerRect.bottom - innerRect.top;
+	if ( !updateBitmap ) {
+		SIZE oldSize;
+		oldSize.cx = oldInnerRect.right - oldInnerRect.left;
+		oldSize.cy = oldInnerRect.bottom - oldInnerRect.top;
+		if ( (oldSize.cx != newSize.cx) || (oldSize.cy != newSize.cy) ) {
+			updateBitmap = true;
+		}
+	}
+	if ( updateBitmap ) {
 
-	// This will cause flicker, so fix it ...
+		if (offscreenDC) {
+
+			// We have an existing DC and bitmap.  Make a new bitmap, select it into
+			//  the DC, then delete the previous bitmap.
+			//
+			HBITMAP previousBitmap = offscreenBitmap;
+			offscreenBitmap = CreateCompatibleBitmap(hdc, newSize.cx, newSize.cy);
+			SelectObject(offscreenDC, offscreenBitmap);
+			DeleteObject(previousBitmap);
+		} else {
+
+			// First time here, create the offscreen DC and a new bitmap,
+			//  then select the bitmap, remembering the original 1x1 monochrome one.
+			//
+			offscreenDC = CreateCompatibleDC(hdc);
+			offscreenBitmap = CreateCompatibleBitmap(hdc, newSize.cx, newSize.cy);
+			oldBitmap = reinterpret_cast<HBITMAP>(SelectObject(offscreenDC, offscreenBitmap));
+		}
+
+		// Draw the graph into the offscreen DC
+		//
+		RECT targetRect;
+		targetRect.left = 0;
+		targetRect.top = 0;
+		targetRect.right = newSize.cx;
+		targetRect.bottom = newSize.cy;
+		DrawGraphOnDC(offscreenDC, &targetRect);
+		updateBitmap = false;
+	}
+
+	// Paint the bitmap on the screen
 	//
-	FillRect(hdc, &outerRect, (HBRUSH)GetStockObject(WHITE_BRUSH));
+	BOOL bRetVal;
+	bRetVal = BitBlt(hdc, innerRect.left, innerRect.top, newSize.cx, newSize.cy, offscreenDC, 0, 0, SRCCOPY);
+	if (!bRetVal) {
+		DebugBreak();
+	}
+}
 
-	// Draw a frame
+void LUTview::PaintNoLutTextOnScreenDC(HDC hdc) {
+	SIZE headingSize;
+	wstring s;
+	wchar_t buf[1024];
+	HFONT hFont = 0;
+	HGDIOBJ oldFont = 0;
+	HGDIOBJ framePen = 0;
+	HGDIOBJ oldPen = 0;
+
+	// Compute the largest square that fits within our rect, centered
 	//
-	POINT pt[256];
-	pt[0].x = innerRect.left;
-	pt[0].y = innerRect.top;
+	GetClientRect(hwnd, &outerRect);
+	RECT rect = outerRect;
+	if (outerRect.right < outerRect.bottom) {
 
-	pt[1].x = innerRect.left;
-	pt[1].y = innerRect.bottom - 1;
+		// Too tall, center ourselves vertically
+		//
+		innerRect.left = 0;
+		innerRect.top = (outerRect.bottom - outerRect.right) / 2;
+		innerRect.right = outerRect.right;
+		innerRect.bottom = innerRect.top + outerRect.right;
 
-	pt[2].x = innerRect.right - 1;
-	pt[2].y = innerRect.bottom - 1;
+		rect.bottom = innerRect.top;
+		if (RectVisible(hdc, &rect)) {
+			FillRect(hdc, &rect, (HBRUSH)GetStockObject(WHITE_BRUSH));
+		}
 
-	pt[3].x = innerRect.right - 1;
-	pt[3].y = innerRect.top;
+		rect.top = innerRect.bottom;
+		rect.bottom = outerRect.bottom;
+		if (RectVisible(hdc, &rect)) {
+			FillRect(hdc, &rect, (HBRUSH)GetStockObject(WHITE_BRUSH));
+		}
 
-	pt[4].x = innerRect.left;
-	pt[4].y = innerRect.top;
+	} else if (outerRect.right > outerRect.bottom) {
 
-	HGDIOBJ framePen = CreatePen(PS_SOLID, 0, LIGHT_GRAY_COLOR);
-	//HGDIOBJ framePen = CreatePen(PS_SOLID, 0, styleTable[LGDS_WHITE].frame);
-	HGDIOBJ oldPen = SelectObject(hdc, framePen);
-	Polyline(hdc, pt, 5);
+		// Too wide, center ourselves horizontally
+		//
+		innerRect.left = (outerRect.right - outerRect.bottom) / 2;
+		innerRect.top = 0;
+		innerRect.right = innerRect.left + outerRect.bottom;
+		innerRect.bottom = outerRect.bottom;
 
-	COLORREF highlightColor = RGB(0x00, 0x33, 0x99);	// Vista UI guidelines shade of blue
-	COLORREF errorColor     = RGB(0x99, 0x00, 0x00);	// Dim red
+		rect.right = innerRect.left;
+		if (RectVisible(hdc, &rect)) {
+			FillRect(hdc, &rect, (HBRUSH)GetStockObject(WHITE_BRUSH));
+		}
 
-	StringCbCopy(buf, sizeof(buf), displayText.c_str());
-	hFont = GetFont(hdc, FC_HEADING);
-	oldFont = SelectObject(hdc, hFont);
-	GetTextExtentPoint32(hdc, buf, static_cast<int>(wcslen(buf)), &headingSize);
-	rect.bottom = innerRect.top + (innerRect.bottom - innerRect.top) / 2;
-	rect.top = rect.bottom - headingSize.cy;
-	rect.left = innerRect.left + (innerRect.right - innerRect.left - headingSize.cx) / 2;
-	rect.right = rect.left + headingSize.cx;
-	SetTextColor(hdc, highlightColor);
-	DrawText(hdc, buf, -1, &rect, 0);
+		rect.left = innerRect.right;
+		rect.right = outerRect.right;
+		if (RectVisible(hdc, &rect)) {
+			FillRect(hdc, &rect, (HBRUSH)GetStockObject(WHITE_BRUSH));
+		}
 
-	StringCbCopy(buf, sizeof(buf), L"No data to display");
-	hFont = GetFont(hdc, FC_INFORMATION);
-	SelectObject(hdc, hFont);
-	GetTextExtentPoint32(hdc, buf, static_cast<int>(wcslen(buf)), &headingSize);
-	rect.top = rect.bottom;
-	rect.bottom = rect.top + headingSize.cy;
-	rect.left = innerRect.left + (innerRect.right - innerRect.left - headingSize.cx) / 2;
-	rect.right = rect.left + headingSize.cx;
-	SetTextColor(hdc, errorColor);
-	DrawText(hdc, buf, -1, &rect, 0);
+	} else {
+		innerRect = outerRect;
+	}
 
-	SelectObject(hdc, oldPen);
-	DeleteObject((HGDIOBJ)framePen);
-	SelectObject(hdc, oldFont);
+	// We can skip the drawing if the whole innerRect is clipped
+	//
+	if (RectVisible(hdc, &innerRect)) {
+
+		// Draw a frame
+		//
+		POINT pt[256];
+		pt[0].x = innerRect.left;
+		pt[0].y = innerRect.top;
+
+		pt[1].x = innerRect.left;
+		pt[1].y = innerRect.bottom - 1;
+
+		pt[2].x = innerRect.right - 1;
+		pt[2].y = innerRect.bottom - 1;
+
+		pt[3].x = innerRect.right - 1;
+		pt[3].y = innerRect.top;
+
+		pt[4].x = innerRect.left;
+		pt[4].y = innerRect.top;
+
+		framePen = CreatePen(PS_SOLID, 0, LIGHT_GRAY_COLOR);
+		oldPen = SelectObject(hdc, framePen);
+		Polyline(hdc, pt, 5);
+
+		COLORREF highlightColor = RGB(0x00, 0x33, 0x99);	// Vista UI guidelines shade of blue
+		COLORREF errorColor     = RGB(0x99, 0x00, 0x00);	// Dim red
+
+		StringCbCopy(buf, sizeof(buf), displayText.c_str());
+		hFont = GetFont(hdc, FC_HEADING);
+		oldFont = SelectObject(hdc, hFont);
+		GetTextExtentPoint32(hdc, buf, static_cast<int>(wcslen(buf)), &headingSize);
+		rect.bottom = innerRect.top + (innerRect.bottom - innerRect.top) / 2;
+		rect.top = rect.bottom - headingSize.cy;
+		rect.left = innerRect.left + (innerRect.right - innerRect.left - headingSize.cx) / 2;
+		rect.right = rect.left + headingSize.cx;
+		SetTextColor(hdc, highlightColor);
+		DrawText(hdc, buf, -1, &rect, 0);
+		ExcludeClipRect(hdc, rect.left, rect.top, rect.right, rect.bottom);
+
+		StringCbCopy(buf, sizeof(buf), L"No data to display");
+		hFont = GetFont(hdc, FC_INFORMATION);
+		SelectObject(hdc, hFont);
+		GetTextExtentPoint32(hdc, buf, static_cast<int>(wcslen(buf)), &headingSize);
+		rect.top = rect.bottom;
+		rect.bottom = rect.top + headingSize.cy;
+		rect.left = innerRect.left + (innerRect.right - innerRect.left - headingSize.cx) / 2;
+		rect.right = rect.left + headingSize.cx;
+		SetTextColor(hdc, errorColor);
+		DrawText(hdc, buf, -1, &rect, 0);
+		ExcludeClipRect(hdc, rect.left, rect.top, rect.right, rect.bottom);
+
+		// Draw the background
+		//
+		rect = innerRect;					// Skip the frame
+		InflateRect(&rect, -1, -1);
+		FillRect(hdc, &rect, (HBRUSH)GetStockObject(WHITE_BRUSH));
+	}
+
+	if (oldPen) {
+		SelectObject(hdc, oldPen);
+	}
+	if (framePen) {
+		DeleteObject((HGDIOBJ)framePen);
+	}
+	if (oldFont) {
+		SelectObject(hdc, oldFont);
+	}
 }

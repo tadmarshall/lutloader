@@ -3,8 +3,6 @@
 
 #include "stdafx.h"
 #include <commctrl.h>
-//#include <uxtheme.h>
-//#include <vssym32.h>
 #include "Monitor.h"
 #include "MonitorPage.h"
 #include "PropertySheet.h"
@@ -22,14 +20,27 @@ extern WNDPROC oldEditWindowProc = 0;				// The original Edit control's window p
 //
 extern double dpiScale;								// Scaling factor for dots per inch (actual versus standard 96 DPI)
 
+// Constants
+//
+#define MINIMUM_TREEVIEW_WIDTH 120					// Minimum TreeView control width for splitter (DPI scaled)
+#define MINIMUM_EDIT_WIDTH 120						// Minimum Edit control width for splitter (DPI scaled)
+
 // Constructor
 //
 MonitorPage::MonitorPage(Monitor * hostMonitor) :
 		monitor(hostMonitor),
+		savedHWND(0),
 		tvRoot(0),
 		tvUserProfiles(0),
-		tvSystemProfiles(0)
+		tvSystemProfiles(0),
+		resetting(false)
 {
+}
+
+// Destructor
+//
+MonitorPage::~MonitorPage() {
+	ClearTreeViewItemList(true);
 }
 
 void MonitorPage::SetEditControlText(wstring newText) {
@@ -38,6 +49,43 @@ void MonitorPage::SetEditControlText(wstring newText) {
 
 Monitor * MonitorPage::GetMonitor(void) const {
 	return monitor;
+}
+
+// A Reset() call tells us that our UI should be reset to starting condition,
+// assuming that we have had our WM_INITDIALOG call and so have something to reset
+//
+void MonitorPage::Reset(void) {
+	if (savedHWND) {
+		resetting = true;
+		tvUserProfiles = 0;
+		tvSystemProfiles = 0;
+		HWND treeControlHwnd = GetDlgItem(savedHWND, IDC_TREE1);
+		TreeView_DeleteAllItems(treeControlHwnd);
+		ClearTreeViewItemList(false);
+		resetting = false;
+		BuildTreeView(treeControlHwnd);
+	}
+}
+
+// Add a TreeViewItem to the end of the list
+//
+TreeViewItem * MonitorPage::AddTreeViewItem(TreeViewItem * treeViewItem) {
+	treeviewitemList.push_back(treeViewItem);
+	return treeViewItem;
+}
+
+// Clear the list of TreeViewItems
+//
+void MonitorPage::ClearTreeViewItemList(bool freeAllMemory) {
+	size_t count = treeviewitemList.size();
+	for (size_t i = 0; i < count; ++i) {
+		delete treeviewitemList[i];
+	}
+	treeviewitemList.clear();
+	if ( freeAllMemory && (treeviewitemList.capacity() > 0) ) {
+		vector <TreeViewItem *> dummy;
+		treeviewitemList.swap(dummy);
+	}
 }
 
 // Build the TreeView
@@ -50,6 +98,15 @@ void MonitorPage::BuildTreeView(HWND treeControlHwnd) {
 	wchar_t buf[1024];
 	TreeViewItem * tiObject = 0;
 
+	// For Vista and later, turn on double-buffering (offscreen bitmap drawing)
+	//
+	if (VistaOrHigher()) {
+#ifndef TVS_EX_DOUBLEBUFFER
+#define TVS_EX_DOUBLEBUFFER         0x0004
+#endif
+		SendMessage(treeControlHwnd, TVM_SETEXTENDEDSTYLE, TVS_EX_DOUBLEBUFFER, TVS_EX_DOUBLEBUFFER);
+	}
+
 	TVINSERTSTRUCT tvInsertStruct;
 	SecureZeroMemory(&tvInsertStruct, sizeof(tvInsertStruct));
 	tvInsertStruct.hInsertAfter = TVI_ROOT;
@@ -58,7 +115,7 @@ void MonitorPage::BuildTreeView(HWND treeControlHwnd) {
 	tvInsertStruct.itemex.stateMask = TVIS_BOLD;
 	StringCbCopy(buf, sizeof(buf), monitor->GetDeviceString().c_str());
 	tvInsertStruct.itemex.pszText = buf;
-	tiObject = TreeViewItem::Add(new TreeViewItem(TREEVIEW_ITEM_TYPE_MONITOR, tvInsertStruct.itemex.pszText)); 
+	tiObject = AddTreeViewItem(new TreeViewItem(TREEVIEW_ITEM_TYPE_MONITOR, tvInsertStruct.itemex.pszText)); 
 	tvInsertStruct.itemex.lParam = reinterpret_cast<LPARAM>(tiObject);
 	tvRoot = reinterpret_cast<HTREEITEM>( SendMessage(treeControlHwnd, TVM_INSERTITEM, 0, reinterpret_cast<LPARAM>(&tvInsertStruct)) );
 	tiObject->SetHTREEITEM(tvRoot);
@@ -73,7 +130,7 @@ void MonitorPage::BuildTreeView(HWND treeControlHwnd) {
 			tvInsertStruct.itemex.mask = TVIF_TEXT | TVIF_PARAM | TVIF_STATE;
 		}
 		tvInsertStruct.itemex.pszText = L"User profiles";
-		tiObject = TreeViewItem::Add(new TreeViewItem(TREEVIEW_ITEM_TYPE_USER_PROFILES, tvInsertStruct.itemex.pszText)); 
+		tiObject = AddTreeViewItem(new TreeViewItem(TREEVIEW_ITEM_TYPE_USER_PROFILES, tvInsertStruct.itemex.pszText)); 
 		tvInsertStruct.itemex.lParam = reinterpret_cast<LPARAM>(tiObject);
 		tvUserProfiles = reinterpret_cast<HTREEITEM>( SendMessage(treeControlHwnd, TVM_INSERTITEM, 0, reinterpret_cast<LPARAM>(&tvInsertStruct)) );
 		tiObject->SetHTREEITEM(tvUserProfiles);
@@ -88,7 +145,7 @@ void MonitorPage::BuildTreeView(HWND treeControlHwnd) {
 			}
 			StringCbCopy(buf, sizeof(buf), profileList[i]->GetName().c_str());
 			tvInsertStruct.itemex.pszText = buf;
-			tiObject = TreeViewItem::Add(new TreeViewItem(TREEVIEW_ITEM_TYPE_PROFILE, tvInsertStruct.itemex.pszText)); 
+			tiObject = AddTreeViewItem(new TreeViewItem(TREEVIEW_ITEM_TYPE_PROFILE, tvInsertStruct.itemex.pszText)); 
 			tvInsertStruct.itemex.lParam = reinterpret_cast<LPARAM>(tiObject);
 			tvItem = reinterpret_cast<HTREEITEM>( SendMessage(treeControlHwnd, TVM_INSERTITEM, 0, reinterpret_cast<LPARAM>(&tvInsertStruct)) );
 			tiObject->SetHTREEITEM(tvItem);
@@ -102,7 +159,7 @@ void MonitorPage::BuildTreeView(HWND treeControlHwnd) {
 			tvInsertStruct.itemex.mask = TVIF_TEXT | TVIF_PARAM | TVIF_STATE;
 		}
 		tvInsertStruct.itemex.pszText = L"System profiles";
-		tiObject = TreeViewItem::Add(new TreeViewItem(TREEVIEW_ITEM_TYPE_SYSTEM_PROFILES, tvInsertStruct.itemex.pszText)); 
+		tiObject = AddTreeViewItem(new TreeViewItem(TREEVIEW_ITEM_TYPE_SYSTEM_PROFILES, tvInsertStruct.itemex.pszText)); 
 		tvInsertStruct.itemex.lParam = reinterpret_cast<LPARAM>(tiObject);
 		tvSystemProfiles = reinterpret_cast<HTREEITEM>( SendMessage(treeControlHwnd, TVM_INSERTITEM, 0, reinterpret_cast<LPARAM>(&tvInsertStruct)) );
 		tiObject->SetHTREEITEM(tvSystemProfiles);
@@ -117,7 +174,7 @@ void MonitorPage::BuildTreeView(HWND treeControlHwnd) {
 			}
 			StringCbCopy(buf, sizeof(buf), profileList[i]->GetName().c_str());
 			tvInsertStruct.itemex.pszText = buf;
-			tiObject = TreeViewItem::Add(new TreeViewItem(TREEVIEW_ITEM_TYPE_PROFILE, tvInsertStruct.itemex.pszText)); 
+			tiObject = AddTreeViewItem(new TreeViewItem(TREEVIEW_ITEM_TYPE_PROFILE, tvInsertStruct.itemex.pszText)); 
 			tvInsertStruct.itemex.lParam = reinterpret_cast<LPARAM>(tiObject);
 			tvItem = reinterpret_cast<HTREEITEM>( SendMessage(treeControlHwnd, TVM_INSERTITEM, 0, reinterpret_cast<LPARAM>(&tvInsertStruct)) );
 			tiObject->SetHTREEITEM(tvItem);
@@ -129,7 +186,7 @@ void MonitorPage::BuildTreeView(HWND treeControlHwnd) {
 	} else {
 		tvInsertStruct.hParent = tvRoot;
 		tvInsertStruct.itemex.pszText = L"Profiles";
-		tiObject = TreeViewItem::Add(new TreeViewItem(TREEVIEW_ITEM_TYPE_PROFILES, tvInsertStruct.itemex.pszText)); 
+		tiObject = AddTreeViewItem(new TreeViewItem(TREEVIEW_ITEM_TYPE_PROFILES, tvInsertStruct.itemex.pszText)); 
 		tvInsertStruct.itemex.lParam = reinterpret_cast<LPARAM>(tiObject);
 		tvSystemProfiles = reinterpret_cast<HTREEITEM>( SendMessage(treeControlHwnd, TVM_INSERTITEM, 0, reinterpret_cast<LPARAM>(&tvInsertStruct)) );
 		tiObject->SetHTREEITEM(tvSystemProfiles);
@@ -143,7 +200,7 @@ void MonitorPage::BuildTreeView(HWND treeControlHwnd) {
 			}
 			StringCbCopy(buf, sizeof(buf), profileList[i]->GetName().c_str());
 			tvInsertStruct.itemex.pszText = buf;
-			tiObject = TreeViewItem::Add(new TreeViewItem(TREEVIEW_ITEM_TYPE_PROFILE, tvInsertStruct.itemex.pszText)); 
+			tiObject = AddTreeViewItem(new TreeViewItem(TREEVIEW_ITEM_TYPE_PROFILE, tvInsertStruct.itemex.pszText)); 
 			tvInsertStruct.itemex.lParam = reinterpret_cast<LPARAM>(tiObject);
 			tvItem = reinterpret_cast<HTREEITEM>( SendMessage(treeControlHwnd, TVM_INSERTITEM, 0, reinterpret_cast<LPARAM>(&tvInsertStruct)) );
 			tiObject->SetHTREEITEM(tvItem);
@@ -180,18 +237,6 @@ INT_PTR CALLBACK EditSubclassProc(HWND hWnd, UINT uMessage, WPARAM wParam, LPARA
 			return CallWindowProc(oldEditWindowProc, hWnd, uMessage, wParam, lParam);
 			break;
 
-#if 0
-		case WM_ERASEBKGND:
-			RECT rect;
-			GetClientRect(hWnd, &rect);
-			HDC hdc;
-			hdc = GetDC(hWnd);
-			FillRect(hdc, &rect, (HBRUSH)(COLOR_BTNFACE + 1));
-			//FillRect(hdc, &rect, (HBRUSH)(COLOR_BTNHIGHLIGHT + 1));
-			ReleaseDC(hWnd, hdc);
-			return 1;
-#endif
-
 	}
 	return CallWindowProc(oldEditWindowProc, hWnd, uMessage, wParam, lParam);
 }
@@ -217,6 +262,7 @@ INT_PTR CALLBACK MonitorPage::MonitorPageProc(HWND hWnd, UINT uMessage, WPARAM w
 		case WM_INITDIALOG:
 		{
 
+#if 0
 			// Remember our size before any resizing as our minimum size
 			//
 			if ( 0 == minimumWindowSize.cx ) {
@@ -224,6 +270,7 @@ INT_PTR CALLBACK MonitorPage::MonitorPageProc(HWND hWnd, UINT uMessage, WPARAM w
 				minimumWindowSize.cx = rect.right - rect.left;
 				minimumWindowSize.cy = rect.bottom - rect.top;
 			}
+#endif
 
 			// Stuff our 'this' pointer into the dialog's window words
 			//
@@ -305,15 +352,11 @@ INT_PTR CALLBACK MonitorPage::MonitorPageProc(HWND hWnd, UINT uMessage, WPARAM w
 			SendMessage(treeControlHwnd, WM_SETFONT, (WPARAM)hFont, TRUE);
 			SendMessage(editControlHwnd, WM_SETFONT, (WPARAM)hFont, TRUE);
 
-			//SetWindowTheme(treeControlHwnd, L"Explorer", 0);
-
 			// Build the TreeView
 			//
 			thisPage->BuildTreeView(treeControlHwnd);
 
-			//SendDlgItemMessage(hWnd, IDC_MONITOR_TEXT, WM_SETFONT, (WPARAM)GetStockObject(ANSI_FIXED_FONT), FALSE);
 			DWORD tabSpacing = 12;
-			//SendDlgItemMessage(hWnd, IDC_MONITOR_TEXT, EM_SETTABSTOPS, 0, (LPARAM)&tabSpacing);
 			SendDlgItemMessage(hWnd, IDC_MONITOR_TEXT, EM_SETTABSTOPS, 1, (LPARAM)&tabSpacing);
 			break;
 		}
@@ -321,6 +364,11 @@ INT_PTR CALLBACK MonitorPage::MonitorPageProc(HWND hWnd, UINT uMessage, WPARAM w
 		// These force the page and read-only edit controls to be white (instead of gray)
 		//
 		case WM_CTLCOLORDLG:
+			return reinterpret_cast<INT_PTR>(GetStockObject(WHITE_BRUSH));
+			break;
+
+		// These force the page and read-only edit controls to be white (instead of gray)
+		//
 		case WM_CTLCOLORSTATIC:
 			return reinterpret_cast<INT_PTR>(GetStockObject(WHITE_BRUSH));
 			break;
@@ -394,18 +442,6 @@ INT_PTR CALLBACK MonitorPage::MonitorPageProc(HWND hWnd, UINT uMessage, WPARAM w
 					tiObject = reinterpret_cast<TreeViewItem *>(pNMTREEVIEWW->itemNew.lParam);
 					tiObject->Handle_TVN_SELCHANGEDW(thisPage, pNMTREEVIEWW);
 					break;
-
-#if 0
-				// InfoTip
-				//
-				case TVN_GETINFOTIPW:
-					NMTVGETINFOTIPW * pNMTVGETINFOTIPW;
-					pNMTVGETINFOTIPW = reinterpret_cast<NMTVGETINFOTIPW *>(lParam);
-					StringCbCopy(pNMTVGETINFOTIPW->pszText, pNMTVGETINFOTIPW->cchTextMax, L"Tad's wonderful InfoTip");
-					static int count_TVN_GETINFOTIPW;
-					++count_TVN_GETINFOTIPW;
-					break;
-#endif
 
 			}
 			break;
@@ -496,16 +532,18 @@ INT_PTR CALLBACK MonitorPage::MonitorPageProc(HWND hWnd, UINT uMessage, WPARAM w
 						tvRect.top - wiParent.rcClient.top,
 						xLeft - (tvRect.left - wiParent.rcClient.left),
 						tvRect.bottom - tvRect.top,
-						SWP_NOACTIVATE | SWP_NOCOPYBITS | SWP_NOOWNERZORDER | SWP_NOREDRAW | SWP_NOZORDER );
-				InvalidateRect(treeControlHwnd, NULL, TRUE);
+						SWP_NOACTIVATE | SWP_NOCOPYBITS | SWP_NOOWNERZORDER | SWP_NOZORDER );
+						//SWP_NOACTIVATE | SWP_NOCOPYBITS | SWP_NOOWNERZORDER | SWP_NOREDRAW | SWP_NOZORDER );
+				//InvalidateRect(treeControlHwnd, NULL, TRUE);
 				hdwp = DeferWindowPos( hdwp, editControlHwnd, 0,
 						xRight,
 						edRect.top - wiParent.rcClient.top,
 						edRect.right - xRight - wiParent.rcClient.left,
 						edRect.bottom - edRect.top,
-						SWP_NOACTIVATE | SWP_NOCOPYBITS | SWP_NOOWNERZORDER | SWP_NOREDRAW | SWP_NOZORDER );
-				InvalidateRect(editControlHwnd, NULL, TRUE);
-				InvalidateRect(hWnd, NULL, TRUE);
+						SWP_NOACTIVATE | SWP_NOCOPYBITS | SWP_NOOWNERZORDER | SWP_NOZORDER );
+						//SWP_NOACTIVATE | SWP_NOCOPYBITS | SWP_NOOWNERZORDER | SWP_NOREDRAW | SWP_NOZORDER );
+				//InvalidateRect(editControlHwnd, NULL, TRUE);
+				//InvalidateRect(hWnd, NULL, TRUE);
 				if (hdwp) {
 					BOOL retVal = EndDeferWindowPos(hdwp);
 					DWORD err = GetLastError();

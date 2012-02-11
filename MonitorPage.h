@@ -4,26 +4,34 @@
 #pragma once
 #include "stdafx.h"
 #include <commctrl.h>
-#include "Monitor.h"
+
+// Forward references
+//
+class Monitor;
+class TreeViewItem;
 
 class MonitorPage {
 
 public:
 	MonitorPage(Monitor * hostMonitor);
+	~MonitorPage();
 
 	void SetEditControlText(wstring newText);
 	Monitor * GetMonitor(void) const;
-	void BuildTreeView(HWND treeControlHwnd);
+	void Reset(void);
 
 	static INT_PTR CALLBACK MonitorPageProc(HWND hWnd, UINT uMessage, WPARAM wParam, LPARAM lParam);
 
 private:
-	Monitor *			monitor;
-	HWND				savedHWND;
-	HTREEITEM			tvRoot;
-	HTREEITEM			tvUserProfiles;
-	HTREEITEM			tvSystemProfiles;
-};
+	void BuildTreeView(HWND treeControlHwnd);
+	TreeViewItem * AddTreeViewItem(TreeViewItem * treeViewItem);
+	void ClearTreeViewItemList(bool freeAllMemory);
 
-#define MINIMUM_TREEVIEW_WIDTH (120)		// Minimum TreeView control width for splitter
-#define MINIMUM_EDIT_WIDTH (120)			// Minimum Edit control width for splitter
+	Monitor *					monitor;
+	HWND						savedHWND;
+	vector <TreeViewItem *>		treeviewitemList;
+	HTREEITEM					tvRoot;
+	HTREEITEM					tvUserProfiles;
+	HTREEITEM					tvSystemProfiles;
+	bool						resetting;
+};

@@ -4,6 +4,8 @@
 #include "stdafx.h"
 #include "Adapter.h"
 #include "Monitor.h"
+#include "MonitorPage.h"
+#include "MonitorSummaryItem.h"
 #include "Utility.h"
 #include <strsafe.h>
 
@@ -24,6 +26,8 @@ Monitor::Monitor(Adapter * hostAdapter, const DISPLAY_DEVICEW & displayMonitor) 
 		DeviceID(displayMonitor.DeviceID),
 		DeviceKey(displayMonitor.DeviceKey),
 		adapter(hostAdapter),
+		monitorPage(0),
+		monitorSummaryItem(0),
 		pLUT(0),
 		UserProfile(0),
 		SystemProfile(0),
@@ -138,7 +142,65 @@ bool Monitor::IsActive(const DISPLAY_DEVICEW & displayMonitor) {
 	return (displayMonitor.StateFlags & DISPLAY_DEVICE_ACTIVE) && (displayMonitor.StateFlags & DISPLAY_DEVICE_ATTACHED);
 }
 
-// Return a string for the Summary panel
+void Monitor::SetMonitorPage(MonitorPage * pagePtr) {
+	monitorPage = pagePtr;
+}
+
+MonitorPage * Monitor::GetMonitorPage(void) {
+	return monitorPage;
+}
+
+void Monitor::SetMonitorSummaryItem(MonitorSummaryItem * itemPtr) {
+	monitorSummaryItem = itemPtr;
+}
+
+MonitorSummaryItem * Monitor::GetMonitorSummaryItem(void) {
+	return monitorSummaryItem;
+}
+
+bool Monitor::GetActiveProfileIsUserProfile(void) const {
+	return activeProfileIsUserProfile;
+}
+
+Profile * Monitor::GetActiveProfile(void) const {
+	return activeProfileIsUserProfile ? UserProfile : SystemProfile;
+}
+
+Profile * Monitor::GetUserProfile(void) const {
+	return UserProfile;
+}
+
+Profile * Monitor::GetSystemProfile(void) const {
+	return SystemProfile;
+}
+
+ProfileList & Monitor::GetProfileList(bool userProfiles) {
+	return userProfiles ? UserProfileList : SystemProfileList;
+}
+
+wstring Monitor::GetDeviceString(void) const {
+	return DeviceString;
+}
+
+Adapter * Monitor::GetAdapter(void) const {
+	return adapter;
+}
+
+LUT * Monitor::GetLutPointer(void) const {
+	return pLUT;
+}
+
+size_t Monitor::GetListSize(void) {
+	return monitorList.size();
+}
+
+// Fetch a reference to a monitor by index number
+//
+Monitor * Monitor::Get(size_t index) {
+	return monitorList[index];
+}
+
+// Return a summary string
 //
 wstring Monitor::SummaryString(void) const {
 	wstring s;
@@ -264,52 +326,4 @@ wstring Monitor::SummaryString(void) const {
 #endif
 
 	return s;
-}
-
-// Return a string for the per-monitor panel (Profile.cpp does all the work)
-//
-wstring Monitor::DetailsString(void) const {
-	return activeProfileIsUserProfile ? UserProfile->DetailsString() : SystemProfile->DetailsString();
-}
-
-bool Monitor::GetActiveProfileIsUserProfile(void) const {
-	return activeProfileIsUserProfile;
-}
-
-Profile * Monitor::GetActiveProfile(void) const {
-	return activeProfileIsUserProfile ? UserProfile : SystemProfile;
-}
-
-Profile * Monitor::GetUserProfile(void) const {
-	return UserProfile;
-}
-
-Profile * Monitor::GetSystemProfile(void) const {
-	return SystemProfile;
-}
-
-ProfileList & Monitor::GetProfileList(bool userProfiles) {
-	return userProfiles ? UserProfileList : SystemProfileList;
-}
-
-wstring Monitor::GetDeviceString(void) const {
-	return DeviceString;
-}
-
-Adapter * Monitor::GetAdapter(void) {
-	return adapter;
-}
-
-LUT * Monitor::GetLutPointer(void) const {
-	return pLUT;
-}
-
-size_t Monitor::GetListSize(void) {
-	return monitorList.size();
-}
-
-// Fetch a reference to a monitor by index number
-//
-Monitor * Monitor::Get(size_t index) {
-	return monitorList[index];
 }

@@ -4,8 +4,12 @@
 #pragma once
 #include "stdafx.h"
 #include <commctrl.h>
-#include "MonitorPage.h"
-#include "Profile.h"
+
+// Forward references
+//
+class Monitor;
+class MonitorPage;
+class Profile;
 
 // TreeViewItem type enumeration, used to figure out what to do with something when it's selected
 //
@@ -22,9 +26,6 @@ class TreeViewItem {
 
 public:
 	TreeViewItem(TREEVIEW_ITEM_TYPE itemType, const wchar_t * tviText);
-
-	static TreeViewItem * Add(TreeViewItem * treeViewItem);
-	static void ClearList(bool freeAllMemory);
 
 	void SetHTREEITEM(HTREEITEM hItem);
 	void SetMonitor(Monitor * monitor);

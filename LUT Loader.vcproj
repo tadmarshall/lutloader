@@ -351,6 +351,10 @@
 				>
 			</File>
 			<File
+				RelativePath=".\LUT.cpp"
+				>
+			</File>
+			<File
 				RelativePath=".\LUTloader.cpp"
 				>
 			</File>

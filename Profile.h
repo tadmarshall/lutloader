@@ -7,6 +7,8 @@
 #include "LUT.h"
 #include "VideoCardGammaTag.h"
 
+// Forward references
+//
 class Profile;
 
 typedef vector <Profile *> ProfileList;
@@ -25,9 +27,6 @@ public:
 	Profile(const wchar_t * profileName);
 	~Profile();
 
-	void Initialize(void);
-	void AddRef(void);
-
 	static Profile * Add(Profile * profile);
 	static void ClearList(bool freeAllMemory);
 
@@ -43,8 +42,6 @@ public:
 private:
 	wstring				ProfileName;					// Name of profile file without path
 	bool				loaded;							// 'true' if already loaded from disk
-	int					Index;							// Unique index number
-	int					RefCount;						// Reference count
 	wstring				ErrorString;					// If LoadFullProfile() fails, record error here
 	wstring				ValidationFailures;				// Profile issues that don't prevent loading
 	LARGE_INTEGER		ProfileSize;					// File size

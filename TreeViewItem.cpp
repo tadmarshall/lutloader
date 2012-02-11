@@ -2,6 +2,8 @@
 //
 
 #include "stdafx.h"
+#include "Monitor.h"
+#include "MonitorPage.h"
 #include "TreeViewItem.h"
 
 // Constructor
@@ -13,31 +15,6 @@ TreeViewItem::TreeViewItem(TREEVIEW_ITEM_TYPE itemType, const wchar_t * tviText)
 		ProfilePtr(0),
 		hTreeItem(0)
 {
-}
-
-// Vector of TreeView items
-//
-static vector <TreeViewItem *> treeviewitemList;
-
-// Add an adapter to the end of the list
-//
-TreeViewItem * TreeViewItem::Add(TreeViewItem * treeViewItem) {
-	treeviewitemList.push_back(treeViewItem);
-	return treeViewItem;
-}
-
-// Clear the list of TreeView items
-//
-void TreeViewItem::ClearList(bool freeAllMemory) {
-	size_t count = treeviewitemList.size();
-	for (size_t i = 0; i < count; ++i) {
-		delete treeviewitemList[i];
-	}
-	treeviewitemList.clear();
-	if ( freeAllMemory && (treeviewitemList.capacity() > 0) ) {
-		vector <TreeViewItem *> dummy;
-		treeviewitemList.swap(dummy);
-	}
 }
 
 void TreeViewItem::SetHTREEITEM(HTREEITEM hItem) {

@@ -16,8 +16,11 @@
 #include <wingdi.h>
 
 #pragma comment(lib, "mscms.lib")					// For GetColorDirectory
-#pragma comment(lib, "uxtheme.lib")					// For OpenThemeData and other visual styles
 #pragma comment(lib, "msimg32.lib")					// For GradientFill
+
+// Optional "features"
+//
+#define GDI_BATCH_LIMIT 0
 
 // Global externs defined in this file
 //
@@ -134,13 +137,6 @@ int LoadAllLUTs(void) {
 			monitor->WriteLutToCard(pLUT);
 		}
 	}
-
-	// TODO -- for now, just show a message box
-	//
-	//wchar_t szCaption[256];
-	//LoadString(g_hInst, IDS_CAPTION, szCaption, _countof(szCaption));
-	//MessageBox(NULL, L"Load LUTs only", szCaption, MB_ICONINFORMATION | MB_OK);
-
 	return 0;
 }
 
@@ -151,10 +147,7 @@ int LoadLUTsAtStartup(void) {
 
 	size_t count = Monitor::GetListSize();
 	if (count) {
-		//MessageBeep(MB_ICONEXCLAMATION);
-		//LoadAllLUTs();
 		Sleep(5000);
-		//MessageBeep(MB_ICONHAND);
 		retVal = LoadAllLUTs();
 	}
 	return retVal;
@@ -206,7 +199,7 @@ int WINAPI WinMain(
 	//
 	FetchMonitorInfo();
 
-	// See if we are invoked with the /L switch
+	// See if we are invoked with /L or /S
 	//
 	int retval;
 	if (0 == strcmp(lpCmdLine, "/L")) {
@@ -214,6 +207,9 @@ int WINAPI WinMain(
 	} else if (0 == strcmp(lpCmdLine, "/S")) {
 		retval = LoadLUTsAtStartup();
 	} else {
+#if GDI_BATCH_LIMIT
+		GdiSetBatchLimit(1);
+#endif
 		retval = ShowPropertySheet(nShowCmd);
 	}
 
@@ -223,7 +219,6 @@ int WINAPI WinMain(
 	Resize::ClearResizeList(true);
 	Resize::ClearAnchorPresetList(true);
 	Profile::ClearList(true);
-	TreeViewItem::ClearList(true);
 	LUTview::ClearList(true);
 	MonitorSummaryItem::ClearList(true);
 

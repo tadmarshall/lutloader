@@ -31,13 +31,16 @@ public:
 	);
 	void SetText(wstring newText);
 	void SetLUT(LUT * lutPointer);
+	void SetUpdateBitmap(void);
+	RECT * GetGraphRect(void);
 
 	static size_t GetListSize(void);
 	static void RegisterWindowClass(void);
 
 private:
-	void DrawImageOnDC(HDC hdc);
-	void DrawNoLutTextOnDC(HDC hdc);
+	void PaintGraphOnScreenDC(HDC hdc);
+	void DrawGraphOnDC(HDC hdc, RECT * targetRect);
+	void PaintNoLutTextOnScreenDC(HDC hdc);
 
 	static LRESULT CALLBACK LUTviewWndProc(HWND hWnd, UINT uMessage, WPARAM wParam, LPARAM lParam);
 
@@ -48,5 +51,9 @@ private:
 	LUT *						pLUT;
 	RECT						outerRect;
 	RECT						innerRect;
+	HDC							offscreenDC;
+	HBITMAP						offscreenBitmap;
+	HBITMAP						oldBitmap;
+	bool						updateBitmap;
 	UINT						paintCount;
 };

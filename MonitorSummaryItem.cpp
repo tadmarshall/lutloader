@@ -2,8 +2,7 @@
 //
 
 #include "stdafx.h"
-//#include <uxtheme.h>
-//#include <vssym32.h>
+#include "Adapter.h"
 #include "LUT.h"
 #include "LUTview.h"
 #include "MonitorSummaryItem.h"
@@ -18,8 +17,8 @@
 #define DRAW_FRAME 0
 #define DRAW_HIGHLIGHT 0
 #define MOUSEOVER_EFFECTS 1
-#define MOUSEOVER_DRAWS_FRAME 1
-#define SHOW_PAINT_COUNT 1
+#define MOUSEOVER_DRAWS_FRAME 0
+#define SHOW_PAINT_COUNT 0
 
 // Some constants
 //
@@ -35,7 +34,7 @@
 #define OFFSET_FROM_WINDOW_EDGE			4
 #define HORIZONTAL_PADDING				18
 #define VERTICAL_PADDING_PER_LINE		2
-#define VERTICAL_PADDING_EXTRA			8
+#define VERTICAL_PADDING_EXTRA			10
 #define INFORMATION_LINE_INDENTATION	10
 
 #if SHOW_INACTIVE_PROFILE
@@ -44,7 +43,7 @@
 
 // Symbols defined in other files
 //
-extern HINSTANCE g_hInst;
+extern HINSTANCE g_hInst;					// Instance handle
 extern double dpiScale;						// Scaling factor for dots per inch (actual versus standard 96 DPI)
 extern LUTview * summaryLutView;			// The single LUT viewer on the Summary page
 extern HWND hwndSummaryLUT;					// HWND for LUTview we created
@@ -125,6 +124,7 @@ LRESULT CALLBACK MonitorSummaryItem::MonitorSummaryItemProc(HWND hWnd, UINT uMes
 					myMonitor->ReadLutFromCard();
 					thisView->lutViewShowsProfile = false;
 					thisView->Update();
+					InvalidateRect(thisView->hwnd, NULL, FALSE);
 				} else if ( LOWORD(wParam) == IDC_RESCAN_BUTTON ) {
 #if 0
 					// Try reading the LUT from the default "screen" DC
@@ -138,15 +138,21 @@ LRESULT CALLBACK MonitorSummaryItem::MonitorSummaryItemProc(HWND hWnd, UINT uMes
 						ReleaseDC(0, hDC);
 					}
 #endif
+					// A rescan can potentially find a completely different set of profiles, changes
+					// to user vs. system usage, etc., so we need to mostly act as if we were restarted as
+					// far as what we show in the UI
+					//
 					myMonitor = thisView->monitor;
 					myMonitor->Initialize();
+					MonitorPage * page = myMonitor->GetMonitorPage();
+					if (page) {
+						page->Reset();
+					}
 					thisView->Update();
+					InvalidateRect(thisView->hwnd, NULL, FALSE);
 				}
 			}
 			break;
-
-		case WM_ERASEBKGND:
-			return 1;
 
 #if MOUSEOVER_EFFECTS
 		// WM_SETCURSOR -- we change the cursor when the mouse is over our text
@@ -256,22 +262,45 @@ LRESULT CALLBACK MonitorSummaryItem::MonitorSummaryItemProc(HWND hWnd, UINT uMes
 			}
 			break;
 
-		case WM_PAINT:
-			PAINTSTRUCT ps;
-			BeginPaint(hWnd, &ps);
+#if 0
+		case WM_NCCALCSIZE:
 			thisView = reinterpret_cast<MonitorSummaryItem *>(static_cast<LONG_PTR>(GetWindowLongPtr(hWnd, DLGWINDOWEXTRA)));
+			if (wParam) {
+				NCCALCSIZE_PARAMS * ncp = reinterpret_cast<NCCALCSIZE_PARAMS *>(lParam);
+				DWORD dw;
+				dw = 0;
+				++dw;
+			} else {
+				RECT * r2 = reinterpret_cast<RECT *>(lParam);
+				DWORD dw;
+				dw = 0;
+				++dw;
+			}
+			break;
+#endif
+
+		case WM_ERASEBKGND:
+			return 1;
+
+		case WM_PAINT:
+			thisView = reinterpret_cast<MonitorSummaryItem *>(static_cast<LONG_PTR>(GetWindowLongPtr(hWnd, DLGWINDOWEXTRA)));
+			PAINTSTRUCT ps;
+			HDC hdc;
+			hdc = BeginPaint(hWnd, &ps);
 			if (thisView) {
 				++thisView->paintCount;
-				thisView->DrawTextOnDC(ps.hdc);
+				thisView->DrawTextOnDC(hdc);
 			}
 			EndPaint(hWnd, &ps);
 			return 0;
-			//return DefWindowProc(hWnd, uMessage, wParam, lParam);
+			break;
+
+		case WM_CTLCOLORBTN:
+			return reinterpret_cast<INT_PTR>(GetStockObject(WHITE_BRUSH));
 			break;
 
 	}
 	return DefDlgProc(hWnd, uMessage, wParam, lParam);
-	//return DefWindowProc(hWnd, uMessage, wParam, lParam);
 }
 
 // Register our window class
@@ -280,8 +309,7 @@ void MonitorSummaryItem::RegisterWindowClass(void) {
 	WNDCLASSEX wc;
 	SecureZeroMemory(&wc, sizeof(wc));
 	wc.cbSize = sizeof(wc);
-	wc.style = CS_HREDRAW | CS_VREDRAW | CS_PARENTDC;
-	//wc.style = CS_SAVEBITS | CS_DBLCLKS;
+	wc.style = 0;
 	wc.lpfnWndProc = MonitorSummaryItem::MonitorSummaryItemProc;
 	wc.cbClsExtra = 0;
 	wc.cbWndExtra = DLGWINDOWEXTRA + sizeof(MonitorSummaryItem *);
@@ -308,10 +336,7 @@ HWND MonitorSummaryItem::CreateMonitorSummaryItemWindow(
 			WS_EX_CONTROLPARENT,
 			MonitorSummaryItemClassName,
 			L"",
-			WS_CHILD | WS_GROUP | WS_VISIBLE | DS_CONTROL | WS_CLIPSIBLINGS | WS_CLIPCHILDREN,
-			//WS_CHILD | WS_GROUP | WS_VISIBLE | DS_CONTROL | WS_CLIPSIBLINGS,
-			//WS_CHILD | WS_GROUP | WS_VISIBLE | DS_3DLOOK | DS_FIXEDSYS | DS_SETFONT | DS_CONTROL | WS_CLIPSIBLINGS,
-			//WS_CHILD | WS_GROUP | WS_VISIBLE | DS_3DLOOK | DS_FIXEDSYS | DS_SETFONT | DS_CONTROL,
+			WS_CHILD | WS_GROUP | WS_VISIBLE | WS_CLIPCHILDREN,
 			x,
 			y,
 			width,
@@ -407,8 +432,8 @@ void MonitorSummaryItem::Update(void) {
 		summaryLutView->SetText(monitor->GetDeviceString());
 		summaryLutView->SetLUT(monitor->GetLutPointer());
 	}
-	InvalidateRect(hwnd, NULL, TRUE);
-	InvalidateRect(hwndSummaryLUT, NULL, TRUE);
+	summaryLutView->SetUpdateBitmap();
+	InvalidateRect(hwndSummaryLUT, summaryLutView->GetGraphRect(), FALSE);
 }
 
 int MonitorSummaryItem::GetDesiredHeight(HDC hdc) {
@@ -438,6 +463,7 @@ int MonitorSummaryItem::GetDesiredHeight(HDC hdc) {
 }
 
 void MonitorSummaryItem::DrawTextOnDC(HDC hdc) {
+	RECT clientRect;
 	SIZE sizeHeading;
 	SIZE sizeActiveProfile;
 	SIZE sizeLutStatus;
@@ -456,19 +482,11 @@ void MonitorSummaryItem::DrawTextOnDC(HDC hdc) {
 	COLORREF disabledColor  = RGB(0x32, 0x32, 0x32);	// Vista UI guidelines dark gray
 #endif
 
-	GetClientRect(hwnd, &headingRect);
-	//FillRect(hdc, &headingRect, (HBRUSH)GetStockObject(LTGRAY_BRUSH));
-	FillRect(hdc, &headingRect, (HBRUSH)GetStockObject(WHITE_BRUSH));
-
-#if DRAW_FRAME
-	FrameRect(hdc, &headingRect, (HBRUSH)GetStockObject(BLACK_BRUSH));
-#endif
-
+	GetClientRect(hwnd, &clientRect);
+	headingRect = clientRect;
 	int offsetFromWindowEdge = static_cast<int>(OFFSET_FROM_WINDOW_EDGE * dpiScale);
 	headingRect.left += offsetFromWindowEdge;
-
-	// added for testing highlight frame
-	headingRect.top += offsetFromWindowEdge;
+	headingRect.top  += offsetFromWindowEdge;
 
 	if (monitor) {
 		s += monitor->GetDeviceString();
@@ -485,33 +503,43 @@ void MonitorSummaryItem::DrawTextOnDC(HDC hdc) {
 
 #if DRAW_HIGHLIGHT
 	if (monitor) {
-		RECT c = headingRect;
-		int inflaterectAmount = static_cast<int>(INFLATERECT_AMOUNT * dpiScale);
-		InflateRect(&c, inflaterectAmount, inflaterectAmount);
-		COLORREF hotTrackBackground = HOT_TRACK_BACKGROUND_TOP;
-		//COLORREF hotTrackBackground = HOT_TRACK_BACKGROUND_MIDDLE;
-		HBRUSH hb = CreateSolidBrush(hotTrackBackground);
-		HBRUSH oldBrush = (HBRUSH)SelectObject(hdc, hb);
-		HPEN pen = CreatePen(PS_SOLID, 0, HOT_TRACK_FRAME);
-		HPEN oldPen = (HPEN)SelectObject(hdc, pen);
-		RoundRect(hdc, c.left, c.top, c.right, c.bottom, 5, 5);
-		SelectObject(hdc, oldBrush);
-		DeleteObject(hb);
-		SelectObject(hdc, oldPen);
-		DeleteObject((HGDIOBJ)pen);
-		SetTextColor(hdc, highlightColor);
-		COLORREF oldColor = SetBkColor(hdc, hotTrackBackground);
-		DrawText(hdc, buf, -1, &headingRect, 0);
-		SetBkColor(hdc, oldColor);
+		if (RectVisible(hdc, &headingRect)) {
+			RECT c = headingRect;
+			int inflaterectAmount = static_cast<int>(INFLATERECT_AMOUNT * dpiScale);
+			InflateRect(&c, inflaterectAmount, inflaterectAmount);
+			COLORREF hotTrackBackground = HOT_TRACK_BACKGROUND_TOP;
+			//COLORREF hotTrackBackground = HOT_TRACK_BACKGROUND_MIDDLE;
+			HBRUSH hb = CreateSolidBrush(hotTrackBackground);
+			HBRUSH oldBrush = (HBRUSH)SelectObject(hdc, hb);
+			HPEN pen = CreatePen(PS_SOLID, 0, HOT_TRACK_FRAME);
+			HPEN oldPen = (HPEN)SelectObject(hdc, pen);
+			RoundRect(hdc, c.left, c.top, c.right, c.bottom, 5, 5);
+			SelectObject(hdc, oldBrush);
+			DeleteObject(hb);
+			SelectObject(hdc, oldPen);
+			DeleteObject((HGDIOBJ)pen);
+			SetTextColor(hdc, highlightColor);
+			COLORREF oldColor = SetBkColor(hdc, hotTrackBackground);
+			DrawText(hdc, buf, -1, &headingRect, 0);
+			SetBkColor(hdc, oldColor);
+			ExcludeClipRect(hdc, headingRect.left, headingRect.top, headingRect.right, headingRect.bottom);
+		}
 	}
 #else
-	SetTextColor(hdc, highlightColor);
-	DrawText(hdc, buf, -1, &headingRect, 0);
+	if (RectVisible(hdc, &headingRect)) {
+		SetTextColor(hdc, highlightColor);
+		DrawText(hdc, buf, -1, &headingRect, 0);
+		ExcludeClipRect(hdc, headingRect.left, headingRect.top, headingRect.right, headingRect.bottom);
+	}
 #endif
 
 	SetTextColor(hdc, normalColor);
 	if ( 0 == monitor ) {
 		SelectObject(hdc, oldFont);
+		FillRect(hdc, &clientRect, (HBRUSH)GetStockObject(WHITE_BRUSH));
+#if DRAW_FRAME
+		FrameRect(hdc, &clientRect, (HBRUSH)GetStockObject(BLACK_BRUSH));
+#endif
 		return;
 	}
 
@@ -528,7 +556,10 @@ void MonitorSummaryItem::DrawTextOnDC(HDC hdc) {
 		primaryMonitorRect.top += sizeHeading.cy - sz2.cy;
 		primaryMonitorRect.right = primaryMonitorRect.left + sz2.cx;
 		primaryMonitorRect.bottom = primaryMonitorRect.top + sz2.cy;
-		DrawText(hdc, buf, -1, &primaryMonitorRect, 0);
+		if (RectVisible(hdc, &primaryMonitorRect)) {
+			DrawText(hdc, buf, -1, &primaryMonitorRect, 0);
+			ExcludeClipRect(hdc, primaryMonitorRect.left, primaryMonitorRect.top, primaryMonitorRect.right, primaryMonitorRect.bottom);
+		}
 	}
 
 	activeProfileRect = headingRect;
@@ -555,11 +586,13 @@ void MonitorSummaryItem::DrawTextOnDC(HDC hdc) {
 	lutStatusRect.top += sizeActiveProfile.cy + verticalPaddingPerLine;
 	activeProfileRect.right = activeProfileRect.left + sizeActiveProfile.cx;
 	activeProfileRect.bottom = activeProfileRect.top + sizeActiveProfile.cy;
-	DrawText(hdc, buf, -1, &activeProfileRect, 0);
+	if (RectVisible(hdc, &activeProfileRect)) {
+		DrawText(hdc, buf, -1, &activeProfileRect, 0);
+		ExcludeClipRect(hdc, activeProfileRect.left, activeProfileRect.top, activeProfileRect.right, activeProfileRect.bottom);
+	}
 
 	// See if the loaded LUT is correct
 	//
-	//Profile * active = monitor->GetActiveProfile();
 	s.clear();
 	COLORREF color;
 	if (activeProfile) {
@@ -639,12 +672,15 @@ void MonitorSummaryItem::DrawTextOnDC(HDC hdc) {
 	lutStatusRect.right = lutStatusRect.left + sizeLutStatus.cx;
 	lutStatusRect.bottom = lutStatusRect.top + sizeLutStatus.cy;
 	SetTextColor(hdc, color);
-	DrawText(hdc, buf, -1, &lutStatusRect, 0);
+	if (RectVisible(hdc, &lutStatusRect)) {
+		DrawText(hdc, buf, -1, &lutStatusRect, 0);
+		ExcludeClipRect(hdc, lutStatusRect.left, lutStatusRect.top, lutStatusRect.right, lutStatusRect.bottom);
+	}
 
 #if SHOW_INACTIVE_PROFILE
 	if (VistaOrHigher()) {
 		inactiveProfileRect = lutStatusRect;
-		inactiveProfileRect.top += sz.cy + verticalPaddingPerLine;
+		inactiveProfileRect.top += sizeLutStatus.cy + verticalPaddingPerLine;
 		s = L"Inactive ";
 		bool userIsActive = monitor->GetActiveProfileIsUserProfile();
 		s += userIsActive ? L"(system) " : L"(user) ";
@@ -654,8 +690,17 @@ void MonitorSummaryItem::DrawTextOnDC(HDC hdc) {
 		StringCbCopy(buf, sizeof(buf), s.c_str());
 		SetTextColor(hdc, disabledColor);
 		//GetTextExtentPoint32(hdc, buf, static_cast<int>(wcslen(buf)), &sz);
-		DrawText(hdc, buf, -1, &inactiveProfileRect, 0);
+		if (RectVisible(hdc, &inactiveProfileRect)) {
+			DrawText(hdc, buf, -1, &inactiveProfileRect, 0);
+			ExcludeClipRect(hdc, inactiveProfileRect.left, inactiveProfileRect.top, inactiveProfileRect.right, inactiveProfileRect.bottom);
+		}
 	}
 #endif
+	FillRect(hdc, &clientRect, (HBRUSH)GetStockObject(WHITE_BRUSH));
+
+#if DRAW_FRAME
+	FrameRect(hdc, &clientRect, (HBRUSH)GetStockObject(BLACK_BRUSH));
+#endif
+
 	SelectObject(hdc, oldFont);
 }
