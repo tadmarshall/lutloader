@@ -13,6 +13,10 @@
 #include <strsafe.h>
 //#include <banned.h>
 
+// Optional "features"
+//
+#define TREEVIEW_USE_DOUBLE_BUFFERING_WHEN_AVAILABLE 1
+
 // Constants
 //
 #define MINIMUM_TREEVIEW_WIDTH	120					// Minimum TreeView control width for splitter (DPI scaled)
@@ -32,6 +36,7 @@ extern WNDPROC oldEditWindowProc = 0;				// The original Edit control's window p
 //
 extern HINSTANCE g_hInst;							// Instance handle
 extern double dpiScale;								// Scaling factor for dots per inch (actual versus standard 96 DPI)
+extern wchar_t * ColorDirectory;
 
 // Global static symbols internal to this file
 //
@@ -49,10 +54,12 @@ MonitorPage::MonitorPage(Monitor * hostMonitor) :
 		tvRoot(0),
 		tvUserProfiles(0),
 		tvSystemProfiles(0),
+		tvOtherProfiles(0),
 		requestedTreeViewWidth(0),
 		requestedRootExpansion(true),
 		requestedUserProfilesExpansion(false),
 		requestedSystemProfilesExpansion(false),
+		requestedOtherProfilesExpansion(false),
 		resetting(false)
 {
 }
@@ -73,6 +80,18 @@ HWND MonitorPage::GetHwnd(void) const {
 
 HWND MonitorPage::GetTreeViewHwnd(void) const {
 	return hwndTreeView;
+}
+
+HTREEITEM MonitorPage::GetUserHTREEITEM(void) const {
+	return tvUserProfiles;
+}
+
+HTREEITEM MonitorPage::GetSystemHTREEITEM(void) const {
+	return tvSystemProfiles;
+}
+
+HTREEITEM MonitorPage::GetOtherHTREEITEM(void) const {
+	return tvOtherProfiles;
 }
 
 Monitor * MonitorPage::GetMonitor(void) const {
@@ -105,24 +124,38 @@ void MonitorPage::GetTreeViewNodeExpansionString(wchar_t * str, size_t strSize) 
 		SendMessage(hwndTreeView, TVM_GETITEM, 0, reinterpret_cast<LPARAM>(&itemEx));
 		bool systemProfilesExpanded = (0 != (itemEx.state & TVIS_EXPANDED));
 
-		StringCbPrintf(str, strSize, L"%d,%d,%d", rootExpanded, userProfilesExpanded, systemProfilesExpanded);
+		itemEx.hItem = tvOtherProfiles;
+		SendMessage(hwndTreeView, TVM_GETITEM, 0, reinterpret_cast<LPARAM>(&itemEx));
+		bool otherProfilesExpanded = (0 != (itemEx.state & TVIS_EXPANDED));
+
+		StringCbPrintf(
+				str,
+				strSize,
+				L"%d,%d,%d,%d",
+				rootExpanded,
+				userProfilesExpanded,
+				systemProfilesExpanded,
+				otherProfilesExpanded );
 	}
 }
 
 void MonitorPage::SetTreeViewNodeExpansionString(wchar_t * str) {
-	int rootExpand;
-	int userProfilesExpand;
-	int systemProfilesExpand;
+	int rootExpanded;
+	int userProfilesExpanded;
+	int systemProfilesExpanded;
+	int otherProfilesExpanded;
 	int nRead = swscanf_s(
 			str,
-			L"%d,%d,%d",
-			&rootExpand,
-			&userProfilesExpand,
-			&systemProfilesExpand );
-	if ( 3 == nRead ) {
-		requestedRootExpansion = (0 != rootExpand);
-		requestedUserProfilesExpansion = (0 != userProfilesExpand);
-		requestedSystemProfilesExpansion = (0 != systemProfilesExpand);
+			L"%d,%d,%d,%d",
+			&rootExpanded,
+			&userProfilesExpanded,
+			&systemProfilesExpanded,
+			&otherProfilesExpanded );
+	if ( 4 == nRead ) {
+		requestedRootExpansion = (0 != rootExpanded);
+		requestedUserProfilesExpansion = (0 != userProfilesExpanded);
+		requestedSystemProfilesExpansion = (0 != systemProfilesExpanded);
+		requestedOtherProfilesExpansion = (0 != otherProfilesExpanded);
 	}
 }
 
@@ -152,10 +185,10 @@ void MonitorPage::ClearTreeViewItemList(bool freeAllMemory) {
 //
 void MonitorPage::Reset(void) {
 	if (hwnd) {
-		HTREEITEM hChild;
+		HTREEITEM hTvItem;
 		TVITEMEX itemEx;
-		TreeViewItem * tvItem;
-		Profile * previousProfileSelection;
+		TREEVIEW_ITEM_TYPE oldItemType = TREEVIEW_ITEM_TYPE_NONE;
+		Profile * oldProfilePtr = 0;
 		bool userProfilesExpanded = false;
 
 		HTREEITEM hSelection = reinterpret_cast<HTREEITEM>(
@@ -166,7 +199,11 @@ void MonitorPage::Reset(void) {
 		itemEx.hItem = hSelection;
 		SendMessage(hwndTreeView, TVM_GETITEM, 0, reinterpret_cast<LPARAM>(&itemEx));
 
-		TreeViewItem previousSelection(*reinterpret_cast<TreeViewItem *>(itemEx.lParam));
+		TreeViewItem * oldSelection = reinterpret_cast<TreeViewItem *>(itemEx.lParam);
+		if (oldSelection) {
+			oldItemType = oldSelection->GetItemType();
+			oldProfilePtr = oldSelection->GetProfilePtr();
+		}
 
 		itemEx.mask = TVIF_HANDLE | TVIF_STATE;
 		itemEx.stateMask = TVIS_EXPANDED;
@@ -184,6 +221,10 @@ void MonitorPage::Reset(void) {
 		SendMessage(hwndTreeView, TVM_GETITEM, 0, reinterpret_cast<LPARAM>(&itemEx));
 		bool systemProfilesExpanded = (0 != (itemEx.state & TVIS_EXPANDED));
 
+		itemEx.hItem = tvOtherProfiles;
+		SendMessage(hwndTreeView, TVM_GETITEM, 0, reinterpret_cast<LPARAM>(&itemEx));
+		bool otherProfilesExpanded = (0 != (itemEx.state & TVIS_EXPANDED));
+
 		resetting = true;
 		SendMessage(hwndTreeView, TVM_DELETEITEM, 0, reinterpret_cast<LPARAM>(TVI_ROOT));
 		ClearTreeViewItemList(false);
@@ -199,8 +240,11 @@ void MonitorPage::Reset(void) {
 		if (systemProfilesExpanded) {
 			SendMessage(hwndTreeView, TVM_EXPAND, TVE_EXPAND, reinterpret_cast<LPARAM>(tvSystemProfiles));
 		}
+		if (otherProfilesExpanded) {
+			SendMessage(hwndTreeView, TVM_EXPAND, TVE_EXPAND, reinterpret_cast<LPARAM>(tvOtherProfiles));
+		}
 
-		switch (previousSelection.GetItemType()) {
+		switch (oldItemType) {
 			case TREEVIEW_ITEM_TYPE_MONITOR:
 				SendMessage(hwndTreeView, TVM_SELECTITEM, TVGN_CARET, reinterpret_cast<LPARAM>(tvRoot));
 				break;
@@ -217,63 +261,25 @@ void MonitorPage::Reset(void) {
 				SendMessage(hwndTreeView, TVM_SELECTITEM, TVGN_CARET, reinterpret_cast<LPARAM>(tvSystemProfiles));
 				break;
 
+			case TREEVIEW_ITEM_TYPE_OTHER_PROFILES:
+				SendMessage(hwndTreeView, TVM_SELECTITEM, TVGN_CARET, reinterpret_cast<LPARAM>(tvOtherProfiles));
+				break;
+
 			case TREEVIEW_ITEM_TYPE_USER_PROFILE:
-				previousProfileSelection = previousSelection.GetProfilePtr();
-				hChild = reinterpret_cast<HTREEITEM>(
-						SendMessage(
-								hwndTreeView,
-								TVM_GETNEXTITEM,
-								TVGN_CHILD,
-								reinterpret_cast<LPARAM>(tvUserProfiles) ) );
-				itemEx.mask = TVIF_PARAM;
-				while (hChild) {
-					itemEx.hItem = hChild;
-					SendMessage(hwndTreeView, TVM_GETITEM, 0, reinterpret_cast<LPARAM>(&itemEx));
-					tvItem = reinterpret_cast<TreeViewItem *>(itemEx.lParam);
-					if ( tvItem && (tvItem->GetProfilePtr() == previousProfileSelection) ) {
-						SendMessage(hwndTreeView, TVM_SELECTITEM, TVGN_CARET, reinterpret_cast<LPARAM>(hChild));
-						break;
-					}
-					hChild = reinterpret_cast<HTREEITEM>(
-							SendMessage(
-									hwndTreeView,
-									TVM_GETNEXTITEM,
-									TVGN_NEXT,
-									reinterpret_cast<LPARAM>(hChild) ) );
-				}
-				if ( 0 == hChild ) {
-					SendMessage(hwndTreeView, TVM_SELECTITEM, TVGN_CARET, reinterpret_cast<LPARAM>(tvUserProfiles));
-				}
+				hTvItem = TreeViewItem::Get_HTREEITEM_ForProfile( hwndTreeView, tvUserProfiles, oldProfilePtr );
+				SendMessage( hwndTreeView, TVM_SELECTITEM, TVGN_CARET, reinterpret_cast<LPARAM>(hTvItem ? hTvItem : tvUserProfiles) );
 				break;
 
 			case TREEVIEW_ITEM_TYPE_SYSTEM_PROFILE:
-				previousProfileSelection = previousSelection.GetProfilePtr();
-				hChild = reinterpret_cast<HTREEITEM>(
-						SendMessage(
-								hwndTreeView,
-								TVM_GETNEXTITEM,
-								TVGN_CHILD,
-								reinterpret_cast<LPARAM>(tvSystemProfiles) ) );
-				itemEx.mask = TVIF_PARAM;
-				while (hChild) {
-					itemEx.hItem = hChild;
-					SendMessage(hwndTreeView, TVM_GETITEM, 0, reinterpret_cast<LPARAM>(&itemEx));
-					tvItem = reinterpret_cast<TreeViewItem *>(itemEx.lParam);
-					if ( tvItem && (tvItem->GetProfilePtr() == previousProfileSelection) ) {
-						SendMessage(hwndTreeView, TVM_SELECTITEM, TVGN_CARET, reinterpret_cast<LPARAM>(hChild));
-						break;
-					}
-					hChild = reinterpret_cast<HTREEITEM>(
-							SendMessage(
-									hwndTreeView,
-									TVM_GETNEXTITEM,
-									TVGN_NEXT,
-									reinterpret_cast<LPARAM>(hChild) ) );
-				}
-				if ( 0 == hChild ) {
-					SendMessage(hwndTreeView, TVM_SELECTITEM, TVGN_CARET, reinterpret_cast<LPARAM>(tvSystemProfiles));
-				}
+				hTvItem = TreeViewItem::Get_HTREEITEM_ForProfile( hwndTreeView, tvSystemProfiles, oldProfilePtr );
+				SendMessage( hwndTreeView, TVM_SELECTITEM, TVGN_CARET, reinterpret_cast<LPARAM>(hTvItem ? hTvItem : tvSystemProfiles) );
 				break;
+
+			case TREEVIEW_ITEM_TYPE_OTHER_PROFILE:
+				hTvItem = TreeViewItem::Get_HTREEITEM_ForProfile( hwndTreeView, tvOtherProfiles, oldProfilePtr );
+				SendMessage( hwndTreeView, TVM_SELECTITEM, TVGN_CARET, reinterpret_cast<LPARAM>(hTvItem ? hTvItem : tvOtherProfiles) );
+				break;
+
 		}
 		resetting = false;
 	}
@@ -433,7 +439,7 @@ void MonitorPage::BuildTreeView(void) {
 	}
 	SendMessage(hwndTreeView, TVM_SETIMAGELIST, TVSIL_NORMAL, reinterpret_cast<LPARAM>(hImageList));
 
-#if 1
+#if TREEVIEW_USE_DOUBLE_BUFFERING_WHEN_AVAILABLE
 	// For Vista and later, turn on double-buffering (offscreen bitmap drawing)
 	//
 	if (VistaOrHigher()) {
@@ -486,21 +492,21 @@ void MonitorPage::BuildTreeView(void) {
 		profileList = monitor->GetProfileList(true);
 		count = profileList.size();
 		for (size_t i = 0; i < count; ++i) {
-			 profileList[i]->LoadFullProfile(false);
- 			 if (profileList[i]->HasEmbeddedWcsProfile()) {
+			profileList[i]->LoadFullProfile(false);
+ 			if (profileList[i]->HasEmbeddedWcsProfile()) {
 				tvInsertStruct.itemex.iImage = imageWCSprofile;
-			 } else {
+			} else {
 				tvInsertStruct.itemex.iImage = IMAGE_ICC_PROFILE;
-			 }
-			 if (profileList[i]->GetLutPointer()) {
+			}
+			if (profileList[i]->GetLutPointer()) {
 				tvInsertStruct.itemex.mask = TVIF_TEXT | TVIF_PARAM | TVIF_STATE | TVIF_IMAGE | TVIF_SELECTEDIMAGE;
 				tvInsertStruct.itemex.state = INDEXTOOVERLAYMASK(1);
 				tvInsertStruct.itemex.stateMask = TVIS_OVERLAYMASK;
-			 } else {
+			} else {
 				tvInsertStruct.itemex.mask = TVIF_TEXT | TVIF_PARAM | TVIF_IMAGE | TVIF_SELECTEDIMAGE;
 				tvInsertStruct.itemex.state = 0;
 				tvInsertStruct.itemex.stateMask = 0;
-			 }
+			}
 			tvInsertStruct.itemex.iSelectedImage = tvInsertStruct.itemex.iImage;
 			if ( profileList[i] == monitor->GetUserProfile() ) {
 				tvInsertStruct.itemex.mask = TVIF_TEXT | TVIF_PARAM | TVIF_STATE | TVIF_IMAGE | TVIF_SELECTEDIMAGE;
@@ -553,21 +559,21 @@ void MonitorPage::BuildTreeView(void) {
 	profileList = monitor->GetProfileList(false);
 	count = profileList.size();
 	for (size_t i = 0; i < count; ++i) {
-		 profileList[i]->LoadFullProfile(false);
-		 if (profileList[i]->HasEmbeddedWcsProfile()) {
+		profileList[i]->LoadFullProfile(false);
+		if (profileList[i]->HasEmbeddedWcsProfile()) {
 			tvInsertStruct.itemex.iImage = imageWCSprofile;
-		 } else {
+		} else {
 			tvInsertStruct.itemex.iImage = IMAGE_ICC_PROFILE;
-		 }
-		 if (profileList[i]->GetLutPointer()) {
+		}
+		if (profileList[i]->GetLutPointer()) {
 			tvInsertStruct.itemex.mask = TVIF_TEXT | TVIF_PARAM | TVIF_STATE | TVIF_IMAGE | TVIF_SELECTEDIMAGE;
 			tvInsertStruct.itemex.state = INDEXTOOVERLAYMASK(1);
 			tvInsertStruct.itemex.stateMask = TVIS_OVERLAYMASK;
-		 } else {
+		} else {
 			tvInsertStruct.itemex.mask = TVIF_TEXT | TVIF_PARAM | TVIF_IMAGE | TVIF_SELECTEDIMAGE;
 			tvInsertStruct.itemex.state = 0;
 			tvInsertStruct.itemex.stateMask = 0;
-		 }
+		}
 		tvInsertStruct.itemex.iSelectedImage = tvInsertStruct.itemex.iImage;
 		if ( profileList[i] == monitor->GetSystemProfile() ) {
 			tvInsertStruct.itemex.mask = TVIF_TEXT | TVIF_PARAM | TVIF_STATE | TVIF_IMAGE | TVIF_SELECTEDIMAGE;
@@ -584,6 +590,100 @@ void MonitorPage::BuildTreeView(void) {
 	}
 	SendMessage(hwndTreeView, TVM_SORTCHILDREN, FALSE, reinterpret_cast<LPARAM>(tvSystemProfiles));
 
+	// Add other display profiles -- everything in the color directory that is a display profile
+	// and isn't already on one of the lists
+	//
+	tvInsertStruct.hParent = tvRoot;
+	tvInsertStruct.hInsertAfter = TVI_LAST;
+	tvInsertStruct.itemex.mask = TVIF_TEXT | TVIF_PARAM | TVIF_IMAGE | TVIF_SELECTEDIMAGE;
+	tvInsertStruct.itemex.state = 0;
+	tvInsertStruct.itemex.stateMask = 0;
+	tvInsertStruct.itemex.iImage = IMAGE_PROFILES;
+	tvInsertStruct.itemex.iSelectedImage = IMAGE_PROFILES;
+	tvInsertStruct.itemex.pszText = L"Other installed display profiles";
+	tiObject = AddTreeViewItem(new TreeViewItem(TREEVIEW_ITEM_TYPE_OTHER_PROFILES));
+	tvInsertStruct.itemex.lParam = reinterpret_cast<LPARAM>(tiObject);
+	tvOtherProfiles = reinterpret_cast<HTREEITEM>( SendMessage(hwndTreeView, TVM_INSERTITEM, 0, reinterpret_cast<LPARAM>(&tvInsertStruct)) );
+	tiObject->SetHTREEITEM(tvOtherProfiles);
+	tvInsertStruct.hParent = tvOtherProfiles;
+
+	if (ColorDirectory) {
+		wchar_t filepath[1024];
+		StringCbCopy(filepath, sizeof(filepath), ColorDirectory);
+		StringCbCat(filepath, sizeof(filepath), L"\\*");
+		WIN32_FIND_DATA findData;
+		SecureZeroMemory(&findData, sizeof(findData));
+		bool keepGoing = true;
+		Profile * profile = 0;
+		HANDLE findHandle = FindFirstFile(filepath, &findData);
+		if (INVALID_HANDLE_VALUE != findHandle) {
+			while (keepGoing) {
+#define SKIP_BITS (FILE_ATTRIBUTE_DIRECTORY | FILE_ATTRIBUTE_DEVICE | FILE_ATTRIBUTE_REPARSE_POINT | FILE_ATTRIBUTE_OFFLINE | FILE_ATTRIBUTE_VIRTUAL)
+				if ( 0 == (SKIP_BITS & findData.dwFileAttributes) ) {
+					profile = Profile::Add(new Profile(findData.cFileName));
+
+					// Filter out profiles that are on another list already
+					//
+					bool foundIt = false;
+					if (VistaOrHigher()) {
+						profileList = monitor->GetProfileList(true);
+						count = profileList.size();
+						for (size_t i = 0; i < count; ++i) {
+							if (profile == profileList[i]) {
+								foundIt = true;
+								break;
+							}
+						}
+					}
+					if ( false == foundIt ) {
+						profileList = monitor->GetProfileList(false);
+						count = profileList.size();
+						for (size_t i = 0; i < count; ++i) {
+							if (profile == profileList[i]) {
+								foundIt = true;
+								break;
+							}
+						}
+					}
+
+					// It's not already on a list for this monitor, so if its a valid display profile,
+					// add it to the "other" list
+					//
+					if ( false == foundIt ) {
+						profile->LoadFullProfile(false);
+						if ( (false == profile->IsBadProfile()) && (CLASS_MONITOR == profile->GetProfileClass()) ) {
+							if (profile->HasEmbeddedWcsProfile()) {
+								tvInsertStruct.itemex.iImage = imageWCSprofile;
+							} else {
+								tvInsertStruct.itemex.iImage = IMAGE_ICC_PROFILE;
+							}
+							if (profile->GetLutPointer()) {
+								tvInsertStruct.itemex.mask = TVIF_TEXT | TVIF_PARAM | TVIF_STATE | TVIF_IMAGE | TVIF_SELECTEDIMAGE;
+								tvInsertStruct.itemex.state = INDEXTOOVERLAYMASK(1);
+								tvInsertStruct.itemex.stateMask = TVIS_OVERLAYMASK;
+							} else {
+								tvInsertStruct.itemex.mask = TVIF_TEXT | TVIF_PARAM | TVIF_IMAGE | TVIF_SELECTEDIMAGE;
+								tvInsertStruct.itemex.state = 0;
+								tvInsertStruct.itemex.stateMask = 0;
+							}
+							tvInsertStruct.itemex.iSelectedImage = tvInsertStruct.itemex.iImage;
+							StringCbCopy(buf, sizeof(buf), profile->GetName().c_str());
+							tvInsertStruct.itemex.pszText = buf;
+							tiObject = AddTreeViewItem(new TreeViewItem(TREEVIEW_ITEM_TYPE_OTHER_PROFILE));
+							tvInsertStruct.itemex.lParam = reinterpret_cast<LPARAM>(tiObject);
+							tvItem = reinterpret_cast<HTREEITEM>( SendMessage(hwndTreeView, TVM_INSERTITEM, 0, reinterpret_cast<LPARAM>(&tvInsertStruct)) );
+							tiObject->SetHTREEITEM(tvItem);
+							tiObject->SetProfile(profile);
+						}
+					}
+				}
+				keepGoing = (0 != FindNextFile(findHandle, &findData));
+			}
+			FindClose(findHandle);
+		}
+		SendMessage(hwndTreeView, TVM_SORTCHILDREN, FALSE, reinterpret_cast<LPARAM>(tvOtherProfiles));
+	}
+
 	if ( !resetting ) {
 		if (requestedRootExpansion) {
 			SendMessage(hwndTreeView, TVM_EXPAND, TVE_EXPAND, reinterpret_cast<LPARAM>(tvRoot));
@@ -593,6 +693,9 @@ void MonitorPage::BuildTreeView(void) {
 		}
 		if (requestedSystemProfilesExpansion) {
 			SendMessage(hwndTreeView, TVM_EXPAND, TVE_EXPAND, reinterpret_cast<LPARAM>(tvSystemProfiles));
+		}
+		if (requestedOtherProfilesExpansion) {
+			SendMessage(hwndTreeView, TVM_EXPAND, TVE_EXPAND, reinterpret_cast<LPARAM>(tvOtherProfiles));
 		}
 	}
 }

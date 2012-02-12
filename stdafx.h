@@ -28,6 +28,9 @@
 #define _WIN32_IE _WIN32_IE_IE60			// Allow use of features specific to IE 6.0 or later
 #endif
 
+//#define __STDC_WANT_SECURE_LIB__ 1			// Use memset_s instead of memset for RtlZeroMemory, for example
+//#define STRSAFE_USE_SECURE_CRT 1			// strsafe.h calls secure versions of CRT functions
+
 #ifdef _DEBUG
 #define DEBUG_MEMORY_LEAKS					// Look for memory leaks on program exit
 #endif

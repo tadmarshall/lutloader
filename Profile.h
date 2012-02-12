@@ -42,13 +42,15 @@ public:
 	static void ClearList(bool freeAllMemory);
 
 	wstring GetName(void) const;
-	LUT * GetLutPointer(void) const;
-	wstring GetErrorString(void) const;
 	wstring LoadFullProfile(bool forceReload);
+	bool IsBadProfile(void) const;
+	DWORD GetProfileClass(void) const;
+	LUT * GetLutPointer(void) const;
 	wstring DetailsString(void);
 	LUT_COMPARISON CompareLUT(LUT * otherLUT, DWORD * maxError, DWORD * totalError);
-	bool HasEmbeddedWcsProfile(void);
+	bool HasEmbeddedWcsProfile(void) const;
 	bool EditRegistryProfileList(HKEY hKeyBase, const wchar_t * registryKey, bool moveToEnd);
+	bool InsertIntoRegistryProfileList(HKEY hKeyBase, const wchar_t * registryKey);
 
 	static Profile * GetAllProfiles(HKEY hKeyBase, const wchar_t * registryKey, bool * perUser, ProfileList & profileList);
 
@@ -60,6 +62,7 @@ private:
 
 	wstring				ProfileName;					// Name of profile file without path
 	bool				loaded;							// 'true' if already loaded from disk
+	bool				failed;							// Should align with ErrorString, means bad profile
 	wstring				ErrorString;					// If LoadFullProfile() fails, record error here
 	wstring				ValidationFailures;				// Profile issues that don't prevent loading
 	LARGE_INTEGER		ProfileSize;					// File size

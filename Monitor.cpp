@@ -8,7 +8,6 @@
 #include "MonitorPage.h"
 #include "MonitorSummaryItem.h"
 #include "Utility.h"
-//#define STRSAFE_USE_SECURE_CRT 1
 #include <strsafe.h>
 //#include <banned.h>
 
@@ -66,7 +65,7 @@ bool Monitor::ReadLutFromCard(void) {
 
 // Write a LUT (from any source) to the adapter
 //
-bool Monitor::WriteLutToCard(LUT * lutToWriteToAdapter) {
+bool Monitor::WriteLutToCard(LUT * lutToWriteToAdapter) const {
 	if (lutToWriteToAdapter) {
 		BOOL bRet = 0;
 		HDC hDC = CreateDC(adapter->GetDeviceName().c_str(), 0, 0, 0);
@@ -114,40 +113,137 @@ void Monitor::Initialize(void) {
 	SystemProfile = Profile::GetAllProfiles(HKEY_LOCAL_MACHINE, registryKey, 0, SystemProfileList);
 }
 
-bool Monitor::SetDefaultProfile(Profile * profile, bool userProfile) {
-	wchar_t registryKey[1024];
-	int len;
-	bool success;
-	if ( userProfile ) {
-		len = StringLength(L"\\Registry\\Machine\\System\\CurrentControlSet\\Control\\Class");
-		StringCbCopy( registryKey, sizeof(registryKey),
-			L"Software\\Microsoft\\Windows NT\\CurrentVersion\\ICM\\ProfileAssociations\\Display");
-		StringCbCat(registryKey, sizeof(registryKey), &DeviceKey.c_str()[len]);
-		success = profile->EditRegistryProfileList(HKEY_CURRENT_USER, registryKey, true);
+void Monitor::AddProfileToInternalUserList(Profile * profile) {
+	UserProfileList.insert(UserProfileList.begin(), profile);
+	if ( 1 == UserProfileList.size() ) {
 		UserProfile = profile;
-	} else {
-		len = StringLength(L"\\Registry\\Machine\\");
-		StringCbCopy(registryKey, sizeof(registryKey), &DeviceKey.c_str()[len]);
-		success = profile->EditRegistryProfileList(HKEY_LOCAL_MACHINE, registryKey, true);
+	}
+}
+
+void Monitor::AddProfileToInternalSystemList(Profile * profile) {
+	SystemProfileList.insert(SystemProfileList.begin(), profile);
+	if ( 1 == SystemProfileList.size() ) {
+		SystemProfile = profile;
+	}
+}
+
+void Monitor::RemoveProfileFromInternalUserList(Profile * profile) {
+	bool removingDefault = (profile == UserProfile);
+	ProfileList::iterator itEnd = UserProfileList.end();
+	for (ProfileList::iterator it = UserProfileList.begin(); it != itEnd; ++it) {
+		if ( *it == profile ) {
+			UserProfileList.erase(it);
+			break;
+		}
+	}
+	if ( removingDefault ) {
+		size_t count = UserProfileList.size();
+		UserProfile = (0 == count) ? 0 : UserProfileList[count - 1];
+	}
+}
+
+void Monitor::RemoveProfileFromInternalSystemList(Profile * profile) {
+	bool removingDefault = (profile == SystemProfile);
+	ProfileList::iterator itEnd = SystemProfileList.end();
+	for (ProfileList::iterator it = SystemProfileList.begin(); it != itEnd; ++it) {
+		if ( *it == profile ) {
+			SystemProfileList.erase(it);
+			break;
+		}
+	}
+	if ( removingDefault ) {
+		size_t count = SystemProfileList.size();
+		SystemProfile = (0 == count) ? 0 : SystemProfileList[count - 1];
+	}
+}
+
+bool Monitor::SetDefaultUserProfile(Profile * profile) {
+	wchar_t registryKey[1024];
+	int len = StringLength(L"\\Registry\\Machine\\System\\CurrentControlSet\\Control\\Class");
+	StringCbCopy( registryKey, sizeof(registryKey),
+		L"Software\\Microsoft\\Windows NT\\CurrentVersion\\ICM\\ProfileAssociations\\Display");
+	StringCbCat(registryKey, sizeof(registryKey), &DeviceKey.c_str()[len]);
+	bool success = profile->EditRegistryProfileList(HKEY_CURRENT_USER, registryKey, true);
+	if (success) {
+		UserProfile = profile;
+	}
+	return success;
+}
+
+bool Monitor::SetDefaultSystemProfile(Profile * profile) {
+	wchar_t registryKey[1024];
+	int len = StringLength(L"\\Registry\\Machine\\");
+	StringCbCopy(registryKey, sizeof(registryKey), &DeviceKey.c_str()[len]);
+	bool success = profile->EditRegistryProfileList(HKEY_LOCAL_MACHINE, registryKey, true);
+	if (success) {
 		SystemProfile = profile;
 	}
 	return success;
 }
 
-bool Monitor::RemoveProfileAssociation(Profile * profile, bool userProfile) {
+bool Monitor::AddUserProfileAssociation(Profile * profile) {
 	wchar_t registryKey[1024];
-	int len;
-	bool success;
-	if ( userProfile ) {
-		len = StringLength(L"\\Registry\\Machine\\System\\CurrentControlSet\\Control\\Class");
-		StringCbCopy( registryKey, sizeof(registryKey),
-			L"Software\\Microsoft\\Windows NT\\CurrentVersion\\ICM\\ProfileAssociations\\Display");
-		StringCbCat(registryKey, sizeof(registryKey), &DeviceKey.c_str()[len]);
-		success = profile->EditRegistryProfileList(HKEY_CURRENT_USER, registryKey, false);
-	} else {
-		len = StringLength(L"\\Registry\\Machine\\");
-		StringCbCopy(registryKey, sizeof(registryKey), &DeviceKey.c_str()[len]);
-		success = profile->EditRegistryProfileList(HKEY_LOCAL_MACHINE, registryKey, false);
+	int len = StringLength(L"\\Registry\\Machine\\System\\CurrentControlSet\\Control\\Class");
+	StringCbCopy( registryKey, sizeof(registryKey),
+		L"Software\\Microsoft\\Windows NT\\CurrentVersion\\ICM\\ProfileAssociations\\Display");
+	StringCbCat(registryKey, sizeof(registryKey), &DeviceKey.c_str()[len]);
+	bool success = profile->InsertIntoRegistryProfileList(HKEY_CURRENT_USER, registryKey);
+	if (success) {
+		AddProfileToInternalUserList(profile);
+	}
+	return success;
+}
+
+bool Monitor::AddSystemProfileAssociation(Profile * profile) {
+	wchar_t registryKey[1024];
+	int len = StringLength(L"\\Registry\\Machine\\");
+	StringCbCopy(registryKey, sizeof(registryKey), &DeviceKey.c_str()[len]);
+	bool success = profile->InsertIntoRegistryProfileList(HKEY_LOCAL_MACHINE, registryKey);
+	if (success) {
+		AddProfileToInternalSystemList(profile);
+	}
+	return success;
+}
+
+bool Monitor::RemoveUserProfileAssociation(Profile * profile) {
+	wchar_t registryKey[1024];
+	int len = StringLength(L"\\Registry\\Machine\\System\\CurrentControlSet\\Control\\Class");
+	StringCbCopy( registryKey, sizeof(registryKey),
+		L"Software\\Microsoft\\Windows NT\\CurrentVersion\\ICM\\ProfileAssociations\\Display");
+	StringCbCat(registryKey, sizeof(registryKey), &DeviceKey.c_str()[len]);
+	bool success = profile->EditRegistryProfileList(HKEY_CURRENT_USER, registryKey, false);
+	if (success) {
+		RemoveProfileFromInternalUserList(profile);
+	}
+	return success;
+}
+
+bool Monitor::RemoveSystemProfileAssociation(Profile * profile) {
+	wchar_t registryKey[1024];
+	int len = StringLength(L"\\Registry\\Machine\\");
+	StringCbCopy(registryKey, sizeof(registryKey), &DeviceKey.c_str()[len]);
+	bool success = profile->EditRegistryProfileList(HKEY_LOCAL_MACHINE, registryKey, false);
+	if (success) {
+		RemoveProfileFromInternalSystemList(profile);
+	}
+	return success;
+}
+
+bool Monitor::SetActiveProfileIsUserProfile(bool userActive) {
+	HKEY hKey;
+	wchar_t registryKey[1024];
+	int len = StringLength(L"\\Registry\\Machine\\System\\CurrentControlSet\\Control\\Class");
+	StringCbCopy( registryKey, sizeof(registryKey),
+		L"Software\\Microsoft\\Windows NT\\CurrentVersion\\ICM\\ProfileAssociations\\Display");
+	StringCbCat(registryKey, sizeof(registryKey), &DeviceKey.c_str()[len]);
+	bool success = false;
+	if (ERROR_SUCCESS == RegOpenKeyEx(HKEY_CURRENT_USER, registryKey, 0, KEY_SET_VALUE, &hKey)) {
+		DWORD data = userActive ? 1 : 0;
+		success = (ERROR_SUCCESS == RegSetValueEx(hKey, L"UsePerUserProfiles", NULL, REG_DWORD, reinterpret_cast<BYTE *>(&data), sizeof(data)));
+		RegCloseKey(hKey);
+	}
+	if (success) {
+		activeProfileIsUserProfile = userActive;
 	}
 	return success;
 }
@@ -187,7 +283,7 @@ void Monitor::SetMonitorPage(MonitorPage * pagePtr) {
 	monitorPage = pagePtr;
 }
 
-MonitorPage * Monitor::GetMonitorPage(void) {
+MonitorPage * Monitor::GetMonitorPage(void) const {
 	return monitorPage;
 }
 
@@ -195,7 +291,7 @@ void Monitor::SetMonitorSummaryItem(MonitorSummaryItem * itemPtr) {
 	monitorSummaryItem = itemPtr;
 }
 
-MonitorSummaryItem * Monitor::GetMonitorSummaryItem(void) {
+MonitorSummaryItem * Monitor::GetMonitorSummaryItem(void) const {
 	return monitorSummaryItem;
 }
 
@@ -345,19 +441,19 @@ wstring Monitor::SummaryString(void) const {
 	// Display the start of the gamma ramp
 	//
 	s += L"\r\nStart of gamma ramp (first 10 entries):\r\n\tRed \t= ";
-	for (int i = 0; i < COUNT_OF_GAMMA_VALUES_TO_SHOW; i++) {
+	for (int i = 0; i < COUNT_OF_GAMMA_VALUES_TO_SHOW; ++i) {
 		wchar_t buf[10];
 		StringCbPrintf(buf, sizeof(buf), L" %04X", pLUT->red[i]);
 		s += buf;
 	}
 	s += L" \r\n\tGreen\t= ";
-	for (int i = 0; i < COUNT_OF_GAMMA_VALUES_TO_SHOW; i++) {
+	for (int i = 0; i < COUNT_OF_GAMMA_VALUES_TO_SHOW; ++i) {
 		wchar_t buf[10];
 		StringCbPrintf(buf, sizeof(buf), L" %04X", pLUT->green[i]);
 		s += buf;
 	}
 	s += L"\r\n\tBlue\t= ";
-	for (int i = 0; i < COUNT_OF_GAMMA_VALUES_TO_SHOW; i++) {
+	for (int i = 0; i < COUNT_OF_GAMMA_VALUES_TO_SHOW; ++i) {
 		wchar_t buf[10];
 		StringCbPrintf(buf, sizeof(buf), L" %04X", pLUT->blue[i]);
 		s += buf;

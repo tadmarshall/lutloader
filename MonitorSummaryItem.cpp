@@ -119,14 +119,17 @@ LRESULT CALLBACK MonitorSummaryItem::MonitorSummaryItemProc(HWND hWnd, UINT uMes
 				if ( LOWORD(wParam) == IDC_LOAD_BUTTON ) {
 					myMonitor = thisView->monitor;
 					activeProfile = myMonitor->GetActiveProfile();
-					pProfileLUT = activeProfile->GetLutPointer();
+					if (activeProfile) {
+						pProfileLUT = activeProfile->GetLutPointer();
+					} else {
+						pProfileLUT = 0;
+					}
 					if ( pProfileLUT ) {
 						myMonitor->WriteLutToCard(pProfileLUT);
 					} else {
-						LUT * pLUT = new LUT;
-						GetSignedLUT(pLUT);
-						myMonitor->WriteLutToCard(pLUT);
-						delete pLUT;
+						LUT MyLUT;
+						GetSignedLUT(&MyLUT);
+						myMonitor->WriteLutToCard(&MyLUT);
 					}
 					myMonitor->ReadLutFromCard();
 					thisView->lutViewShowsProfile = false;

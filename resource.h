@@ -31,6 +31,10 @@
 #define ID_GRADIENTBACKGROUND           40003
 #define ID_SET_DEFAULT_PROFILE          40004
 #define ID_REMOVE_ASSOCIATION           40005
+#define ID_ADD_USER_ASSOCIATION         40006
+#define ID_ADD_SYSTEM_ASSOCIATION       40007
+#define ID_USER_PROFILES_ACTIVE         40008
+#define ID_SYSTEM_PROFILES_ACTIVE       40009
 
 // Next default values for new objects
 // 
@@ -38,7 +42,7 @@
 #ifndef APSTUDIO_READONLY_SYMBOLS
 #define _APS_NO_MFC                     1
 #define _APS_NEXT_RESOURCE_VALUE        110
-#define _APS_NEXT_COMMAND_VALUE         40006
+#define _APS_NEXT_COMMAND_VALUE         40010
 #define _APS_NEXT_CONTROL_VALUE         1010
 #define _APS_NEXT_SYMED_VALUE           101
 #endif

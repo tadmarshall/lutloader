@@ -33,16 +33,20 @@ public:
 	void SetHTREEITEM(HTREEITEM hItem);
 	void SetMonitor(Monitor * monitor);
 	void SetProfile(Profile * profile);
-	int GetItemType(void) const;
+	TREEVIEW_ITEM_TYPE GetItemType(void) const;
 	Profile * GetProfilePtr(void) const;
 	void Handle_TVN_SELCHANGEDW(MonitorPage * monitorPage, NMTREEVIEWW * pNMTREEVIEWW);
 	void Handle_WM_CONTEXTMENU(MonitorPage * monitorPage, POINT * screenClickPoint);
 
-private:
-	void ProfileContextMenu(MonitorPage * monitorPage, POINT * screenClickPoint, bool isUser);
+	static HTREEITEM Get_HTREEITEM_ForProfile(HWND hwndTreeView, HTREEITEM subTree, Profile * profile);
 
-	int					ItemType;
-	Monitor *			MonitorPtr;
-	Profile *			ProfilePtr;
-	HTREEITEM			hTreeItem;
+private:
+	void ProfileListContextMenu(MonitorPage * monitorPage, POINT * screenClickPoint);
+	void ProfileContextMenu(MonitorPage * monitorPage, POINT * screenClickPoint, bool isUser);
+	void OtherProfileContextMenu(MonitorPage * monitorPage, POINT * screenClickPoint);
+
+	TREEVIEW_ITEM_TYPE		ItemType;
+	Monitor *				MonitorPtr;
+	Profile *				ProfilePtr;
+	HTREEITEM				hTreeItem;
 };

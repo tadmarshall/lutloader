@@ -9,8 +9,6 @@
 #include <strsafe.h>
 //#include <banned.h>
 
-#include <winnls.h>
-
 // Optional "features"
 //
 #if READ_EMBEDDED_WCS_PROFILE
@@ -82,28 +80,73 @@ typedef struct tag_mlucType {
 	mlucEntryType		Entries[1];
 } mlucType;
 
+typedef struct tag_curvType {
+	DWORD				Type;
+	DWORD				Reserved;
+	DWORD				EntryCount;
+	unsigned short		Entries[1];
+} curvType;
+
+typedef struct tag_measType {
+	DWORD				Type;
+	DWORD				Reserved;
+	DWORD				Observer;
+	CIEXYZ				Backing;
+	DWORD				Geometry;
+	DWORD				Flare;
+	DWORD				Illuminant;
+} measType;
+
+typedef struct tag_viewType {
+	DWORD				Type;
+	DWORD				Reserved;
+	CIEXYZ				IlluminantXYZ;
+	CIEXYZ				SurroundXYZ;
+	DWORD				Illuminant;
+} viewType;
+
+typedef struct tag_signatureType {
+	DWORD				Type;
+	DWORD				Reserved;
+	DWORD				Signature;
+} signatureType;
+
+typedef struct tag_chadsf32Type {
+	DWORD				Type;
+	DWORD				Reserved;
+	DWORD				a0;
+	DWORD				a1;
+	DWORD				a2;
+	DWORD				a3;
+	DWORD				a4;
+	DWORD				a5;
+	DWORD				a6;
+	DWORD				a7;
+	DWORD				a8;
+} chadsf32Type;
+
 // List of CMMs
 //
 const NAME_LOOKUP knownCMMs[] = {
-	{ 'ADBE',				L"Adobe CMM" },
+	{ '32BT',				L"the imaging factory CMM" },
 	{ 'ACMS',				L"Agfa CMM" },
+	{ 'ADBE',				L"Adobe CMM" },
 	{ 'appl',				L"Apple CMM" },
+	{ 'argl',				L"Argyll CMS CMM" },
 	{ 'CCMS',				L"ColorGear CMM" },
-	{ 'UCCM',				L"ColorGear CMM Lite" },
-	{ 'UCMS',				L"ColorGear CMM C" },
 	{ 'EFI ',				L"EFI CMM" },
 	{ 'FF  ',				L"Fuji Film CMM" },
 	{ 'HCMM',				L"Harlequin RIP CMM" },
-	{ 'argl',				L"Argyll CMS CMM" },
-	{ 'LgoS',				L"LogoSync CMM" },
 	{ 'HDM ',				L"Heidelberg CMM" },
-	{ 'lcms',				L"Little CMS CMM" },
 	{ 'KCMS',				L"Kodak CMM" },
+	{ 'lcms',				L"Little CMS CMM" },
+	{ 'LgoS',				L"LogoSync CMM" },
 	{ 'MCML',				L"Konica Minolta CMM" },
-	{ 'SIGN',				L"Mutoh CMM" },
 	{ 'RGMS',				L"DeviceLink CMM" },
 	{ 'SICC',				L"SampleICC CMM" },
-	{ '32BT',				L"the imaging factory CMM" },
+	{ 'SIGN',				L"Mutoh CMM" },
+	{ 'UCCM',				L"ColorGear CMM Lite" },
+	{ 'UCMS',				L"ColorGear CMM C" },
 	{ 'WTG ',				L"Ware to Go CMM" },
 	{ 'zc00',				L"Zoran CMM" }
 };
@@ -113,11 +156,11 @@ const NAME_LOOKUP knownCMMs[] = {
 #ifndef CLASS_CAMP
 #define CLASS_CAMP              'camp'
 #endif
-#ifndef CLASS_GMMP
-#define CLASS_GMMP              'gmmp'
-#endif
 #ifndef CLASS_CDMP
 #define CLASS_CDMP              'cdmp'
+#endif
+#ifndef CLASS_GMMP
+#define CLASS_GMMP              'gmmp'
 #endif
 
 // List of profile classes
@@ -131,8 +174,8 @@ const NAME_LOOKUP profileClasses[] = {
 	{ CLASS_COLORSPACE,		L"ColorSpace Conversion" },
 	{ CLASS_NAMED,			L"Named Color" },
 	{ CLASS_CAMP,			L"WCS Viewing Condition" },
-	{ CLASS_GMMP,			L"WCS Gamut Mapping" },
-	{ CLASS_CDMP,			L"WCS Device" }
+	{ CLASS_CDMP,			L"WCS Device" },
+	{ CLASS_GMMP,			L"WCS Gamut Mapping" }
 };
 
 // List of color spaces
@@ -232,7 +275,7 @@ const NAME_LOOKUP knownTags[] = {
 	{ 'gXYZ',				L"Green matrix column" },
 	{ 'kTRC',				L"Gray tone reproduction curve" },
 	{ 'lumi',				L"Luminance" },
-	{ 'meas',				L"Alternative measurement type" },
+	{ 'meas',				L"Alternative measurement" },
 	{ 'meta',				L"Metadata dictionary" },
 	{ 'mmod',				L"Make and model" },
 	{ 'MS00',				L"Windows Color System embedded profile" },
@@ -267,7 +310,6 @@ const NAME_LOOKUP knownTags[] = {
 	{ 'view',				L"Viewing conditions" },
 	{ 'vued',				L"Viewing conditions description" },
 	{ 'wtpt',				L"Media white point" }
-	//{ '',				L"" },
 };
 
 // List of known tags that have had their names changed starting with version 4.0
@@ -276,25 +318,75 @@ const NAME_LOOKUP knownTagsOldNames[] = {
 	{ 'bXYZ',				L"Blue colorant" },
 	{ 'gXYZ',				L"Green colorant" },
 	{ 'rXYZ',				L"Red colorant" }
-	//{ '',				L"" },
 };
 
-// List of known tag types
+// List of known "observers" as used in the 'meas' tag type
 //
-const NAME_LOOKUP knownTagTypess[] = {
-	{ 'curv',				L"Curve" },
-	{ 'desc',				L"Encoded mixed text" },
-	{ 'mluc',				L"Multi-localized Unicode text" },
-	{ 'text',				L"ASCII text" },
-	{ 'XYZ ',				L"Color in CIEXYZ format" }
-	//{ '',				L"" },
+const NAME_LOOKUP knownObservers[] = {
+	{ 0x00000000,			L"unknown" },
+	{ 0x00000001,			L"CIE 1931" },
+	{ 0x00000002,			L"CIE 1964" }
 };
 
-	// Constructor
+// List of known "geometry" as used in the 'meas' tag type
+//
+const NAME_LOOKUP knownGeometry[] = {
+	{ 0x00000000,			L"unknown" },
+	{ 0x00000001,			L"0/45 or 45/0" },
+	{ 0x00000002,			L"0/d or d/0" }
+};
+
+// List of known "illuminants" as used in the 'meas' tag type
+//
+const NAME_LOOKUP knownIlluminants[] = {
+	{ 0x00000000,			L"unknown" },
+	{ 0x00000001,			L"D50" },
+	{ 0x00000002,			L"D65" },
+	{ 0x00000003,			L"D93" },
+	{ 0x00000004,			L"F2" },
+	{ 0x00000005,			L"D55" },
+	{ 0x00000006,			L"A" },
+	{ 0x00000007,			L"Equi-Power (E)" },
+	{ 0x00000008,			L"F8" }
+};
+
+// List of known technology signatures
+//
+const NAME_LOOKUP knownTechnologies[] = {
+	{ 'AMD ',				L"Active matrix display" },
+	{ 'CRT ',				L"Cathode ray tube display" },
+	{ 'dcam',				L"Digital camera" },
+	{ 'dcpj',				L"Digital cinema projector" },
+	{ 'dmpc',				L"Digital motion picture camera" },
+	{ 'dsub',				L"Dye sublimation printer" },
+	{ 'epho',				L"Electrophotographic printer" },
+	{ 'esta',				L"Electrostatic printer" },
+	{ 'flex',				L"Flexography" },
+	{ 'fprn',				L"Film writer" },
+	{ 'fscn',				L"Film scanner" },
+	{ 'grav',				L"Gravure" },
+	{ 'ijet',				L"Inkjet printer" },
+	{ 'imgs',				L"Photo imagesetter" },
+	{ 'KPCD',				L"Photo CD" },
+	{ 'mpfr',				L"Motion picture film recorder" },
+	{ 'mpfs',				L"Motion picture film scanner" },
+	{ 'offs',				L"Offset lithography" },
+	{ 'pjtv',				L"Projection television" },
+	{ 'PMD ',				L"Passive matrix display" },
+	{ 'rpho',				L"Photographic paper printer" },
+	{ 'rscn',				L"Reflective scanner" },
+	{ 'silk',				L"Silkscreen" },
+	{ 'twax',				L"Thermal wax printer" },
+	{ 'vidc',				L"Video camera" },
+	{ 'vidm',				L"Video monitor" }
+};
+
+// Constructor
 //
 Profile::Profile(const wchar_t * profileName) :
 		ProfileName(profileName),
 		loaded(false),
+		failed(false),
 		ProfileHeader(0),
 		TagCount(0),
 		TagTable(0),
@@ -367,21 +459,31 @@ wstring Profile::GetName(void) const {
 	return ProfileName;
 }
 
+// Get the profile's device/profile class
+//
+DWORD Profile::GetProfileClass(void) const {
+	if ( loaded && !failed && ProfileHeader ) {
+		return swap32(ProfileHeader->phClass);
+	} else {
+		return 0;
+	}
+}
+
 // Get profile's LUT pointer (may be zero)
 //
 LUT * Profile::GetLutPointer(void) const {
 	return pLUT;
 }
 
-// Get the profile's ErrorString
+// Return 'true' for profiles that are unusable
 //
-wstring Profile::GetErrorString(void) const {
-	return ErrorString;
+bool Profile::IsBadProfile(void) const {
+	return failed;
 }
 
 // See if this profile has an embedded WCS profile in it
 //
-bool Profile::HasEmbeddedWcsProfile(void) {
+bool Profile::HasEmbeddedWcsProfile(void) const {
 	return ( -1 != wcsProfileIndex );
 }
 
@@ -435,7 +537,7 @@ Profile * Profile::GetAllProfiles(HKEY hKeyBase, const wchar_t * registryKey, bo
 	return profile;
 }
 
-// This routine serves to two roles: removing a profile's association with a monitor, on either
+// This routine serves two roles: removing a profile's association with a monitor, on either
 // the user or system list, and setting the default profile for a monitor (either list).  In both
 // cases the profile name is removed from the list.  In the case of setting the default profile,
 // the name is then reinserted at the end of the list.
@@ -448,22 +550,13 @@ bool Profile::EditRegistryProfileList(HKEY hKeyBase, const wchar_t * registryKey
 	bool success = false;
 
 	StringCbCopy(profileName, sizeof(profileName), ProfileName.c_str());
-#if 0
-	LONG lStatus = RegOpenKeyEx(hKeyBase, registryKey, 0, KEY_ALL_ACCESS, &hKey);
-	if (ERROR_SUCCESS != lStatus) {
-		wstring errorString = ShowError(L"RegOpenKeyEx", lStatus);
-		errorString += L"\r\n\r\n";
-	} else {
-#else
 	if (ERROR_SUCCESS == RegOpenKeyEx(hKeyBase, registryKey, 0, KEY_QUERY_VALUE | KEY_SET_VALUE, &hKey)) {
-#endif
 		if (ERROR_SUCCESS == RegQueryValueEx(hKey, L"ICMProfile", NULL, NULL, NULL, &dataSize)) {
 			dataSize += 2 * sizeof(wchar_t);
 			BYTE * fromList = reinterpret_cast<BYTE *>(malloc(dataSize));
 			BYTE * toList = reinterpret_cast<BYTE *>(malloc(dataSize));
 			if ( fromList && toList ) {
 				SecureZeroMemory(fromList, dataSize);
-				SecureZeroMemory(toList, dataSize);
 				RegQueryValueEx(hKey, L"ICMProfile", NULL, &dataType, fromList, &dataSize);
 				wchar_t * fromPtr = reinterpret_cast<wchar_t *>(fromList);
 				wchar_t * toPtr = reinterpret_cast<wchar_t *>(toList);
@@ -495,7 +588,7 @@ bool Profile::EditRegistryProfileList(HKEY hKeyBase, const wchar_t * registryKey
 							*toPtr++ = *fromPtr++;
 						}
 						++fromPtr;
-						++toPtr;
+						*toPtr++ = 0;		// NUL-terminate the copied string
 					}
 				}
 
@@ -510,14 +603,75 @@ bool Profile::EditRegistryProfileList(HKEY hKeyBase, const wchar_t * registryKey
 					while (*pn) {
 						*toPtr++ = *pn++;
 					}
+					*toPtr++ = 0;			// NUL-terminate the copied string
 				}
-				*toPtr++ = 0;		// End string with two NULs
-				*toPtr++ = 0;
+				*toPtr++ = 0;				// End string with an extra NUL
 
 				// Write the modified profile list to the registry
 				//
 				dataSize = static_cast<DWORD>(reinterpret_cast<BYTE *>(toPtr) - toList);
 				success = (ERROR_SUCCESS == RegSetValueEx(hKey, L"ICMProfile", NULL, dataType, toList, dataSize));
+			}
+			if (fromList) {
+				free(fromList);
+			}
+			if (toList) {
+				free(toList);
+			}
+		}
+		RegCloseKey(hKey);
+	}
+	return success;
+}
+
+// Insert a profile name at the head of a REG_MULTI_SZ profile list in the registry
+//
+bool Profile::InsertIntoRegistryProfileList(HKEY hKeyBase, const wchar_t * registryKey) {
+	wchar_t profileName[1024];
+	int profileNameLength;
+	HKEY hKey;
+	DWORD dataSizeFrom;
+	DWORD dataSizeTo;
+	DWORD dataType;
+	bool success = false;
+	StringCbCopy(profileName, sizeof(profileName), ProfileName.c_str());
+	profileNameLength = StringLength(profileName);
+	if (ERROR_SUCCESS == RegOpenKeyEx(hKeyBase, registryKey, 0, KEY_QUERY_VALUE | KEY_SET_VALUE, &hKey)) {
+		if (ERROR_SUCCESS == RegQueryValueEx(hKey, L"ICMProfile", NULL, NULL, NULL, &dataSizeFrom)) {
+			dataSizeFrom += 2 * sizeof(wchar_t);
+			dataSizeTo = dataSizeFrom + (sizeof(wchar_t) * (1 + profileNameLength));
+			BYTE * fromList = reinterpret_cast<BYTE *>(malloc(dataSizeFrom));
+			BYTE * toList = reinterpret_cast<BYTE *>(malloc(dataSizeTo));
+			if ( fromList && toList ) {
+				SecureZeroMemory(fromList, dataSizeFrom);
+				RegQueryValueEx(hKey, L"ICMProfile", NULL, &dataType, fromList, &dataSizeFrom);
+				wchar_t * fromPtr = reinterpret_cast<wchar_t *>(fromList);
+				wchar_t * toPtr = reinterpret_cast<wchar_t *>(toList);
+				wchar_t * pn;
+
+				// Put the given profile name at the start of the list
+				//
+				pn = profileName;
+				while (*pn) {
+					*toPtr++ = *pn++;
+				}
+				*toPtr++ = 0;			// NUL-terminate the added string
+
+				// Copy all of the original profile names
+				//
+				while (*fromPtr) {
+					while (*fromPtr) {
+						*toPtr++ = *fromPtr++;
+					}
+					++fromPtr;
+					*toPtr++ = 0;		// NUL-terminate the copied string
+				}
+				*toPtr++ = 0;			// End string with an extra NUL
+
+				// Write the modified profile list to the registry
+				//
+				dataSizeTo = static_cast<DWORD>(reinterpret_cast<BYTE *>(toPtr) - toList);
+				success = (ERROR_SUCCESS == RegSetValueEx(hKey, L"ICMProfile", NULL, dataType, toList, dataSizeTo));
 			}
 			if (fromList) {
 				free(fromList);
@@ -662,6 +816,7 @@ wstring Profile::LoadFullProfile(bool forceReload) {
 	// then we need to clean up from prior passes ... releasing memory, for example
 	//
 	if (forceReload) {
+		failed = false;
 		ErrorString.clear();
 		ValidationFailures.clear();
 		ProfileSize.QuadPart = 0;
@@ -702,6 +857,7 @@ wstring Profile::LoadFullProfile(bool forceReload) {
 	if (ColorDirectory) {
 		StringCbCopy(filepath, sizeof(filepath), ColorDirectory);
 	} else {
+		failed = true;
 		ErrorString = ColorDirectoryErrorString;
 		return ErrorString;
 	}
@@ -721,6 +877,7 @@ wstring Profile::LoadFullProfile(bool forceReload) {
 			NULL
 	);
 	if (INVALID_HANDLE_VALUE == hFile) {
+		failed = true;
 		wstring message = L"Cannot open profile file \"";
 		message += filepath;
 		message += L"\".\r\n\r\n";
@@ -732,6 +889,7 @@ wstring Profile::LoadFullProfile(bool forceReload) {
 	//
 	BOOL bRet = GetFileSizeEx(hFile, &ProfileSize);
 	if (0 == bRet) {
+		failed = true;
 		wstring message = L"Cannot determine the size of profile file \"";
 		message += filepath;
 		message += L"\".\r\n\r\n";
@@ -743,6 +901,7 @@ wstring Profile::LoadFullProfile(bool forceReload) {
 	// Make sure that the file size is acceptable
 	//
 	if ( ProfileSize.QuadPart < (sizeof(PROFILEHEADER) + sizeof(TagCount)) ) {
+		failed = true;
 		wstring message = L"File \"";
 		message += filepath;
 		message += L"\" is not a valid ICC profile.\r\nThe file size (";
@@ -764,6 +923,7 @@ wstring Profile::LoadFullProfile(bool forceReload) {
 	DWORD cb = 0;
 	bRet = ReadFile(hFile, ProfileHeader, sizeof(PROFILEHEADER), &cb, NULL);
 	if ( 0 == bRet ) {
+		failed = true;
 		wstring message = L"Cannot read header of profile file \"";
 		message += filepath;
 		message += L"\".\r\n\r\n";
@@ -772,6 +932,7 @@ wstring Profile::LoadFullProfile(bool forceReload) {
 		return ErrorString;
 	}
 	if ( cb != sizeof(PROFILEHEADER) ) {
+		failed = true;
 		wstring message = L"Cannot read header of profile file \"";
 		message += filepath;
 		StringCbPrintf(
@@ -1017,9 +1178,14 @@ wstring Profile::LoadFullProfile(bool forceReload) {
 		}
 	}
 	if (foundNonZero) {
-		ValidationFailures += L"The profile's reserved bytes following the profile ID are not zero as specified by the ICC.\r\n";
-		StringCbPrintf(buf, sizeof(buf), L"The value 0x%02x was found in the reserved area.\r\n\r\n", *pb );
-		ValidationFailures += buf;
+		ValidationFailures += L"The profile's reserved bytes following the profile ID are not zero as specified by the ICC.\r\n"
+							  L"The reserved bytes are ";
+		pb = 16 + sizeof(ProfileHeader->phCreator) + reinterpret_cast<BYTE *>(&ProfileHeader->phCreator);
+		for ( ; pb < pbEnd; ++pb) {
+			StringCbPrintf(buf, sizeof(buf), L"%02x ", *pb );
+			ValidationFailures += buf;
+		}
+		ValidationFailures += L".\r\n\r\n";
 	}
 
 	// Read the tag count
@@ -1027,6 +1193,7 @@ wstring Profile::LoadFullProfile(bool forceReload) {
 	DWORD testTagCount = 0;
 	bRet = ReadFile(hFile, &testTagCount, sizeof(testTagCount), &cb, NULL);
 	if ( (0 == bRet) || (cb != sizeof(testTagCount) ) ) {
+		failed = true;
 		wstring message = L"Cannot read tag count from profile file \"";
 		message += filepath;
 		message += L"\".\r\n\r\n";
@@ -1040,12 +1207,13 @@ wstring Profile::LoadFullProfile(bool forceReload) {
 	//
 	testTagCount = swap32(testTagCount);
 	if (testTagCount > 1024) {
+		failed = true;
 		wstring message = L"The tag count in profile file \"";
 		message += filepath;
 		StringCbPrintf(
 				buf,
 				sizeof(buf),
-				L"\" is unreasonably large (%u).\r\nThis is probably not a valid ICC profile.\r\n\r\n",
+				L"\" is unreasonably large (%u).\r\nThis is not a valid ICC profile.\r\n\r\n",
 				testTagCount );
 		message += buf;
 		ErrorString = message;
@@ -1055,6 +1223,7 @@ wstring Profile::LoadFullProfile(bool forceReload) {
 	}
 	DWORD smallestPossibleSize = (testTagCount * sizeof(EXTERNAL_TAG_TABLE_ENTRY)) + sizeof(PROFILEHEADER) + sizeof(TagCount) + sizeof(DWORD);
 	if ( smallestPossibleSize > ProfileSize.LowPart ) {
+		failed = true;
 		wstring message = L"File \"";
 		message += filepath;
 		message += L"\" is not a valid ICC profile.\r\nThe tag count (";
@@ -1081,6 +1250,7 @@ wstring Profile::LoadFullProfile(bool forceReload) {
 	bRet = ReadFile(hFile, diskTagTable, tagTableByteCount, &cb, NULL);
 	if ( (0 == bRet) || (cb != tagTableByteCount ) ) {
 		delete [] diskTagTable;
+		failed = true;
 		wstring message = L"Cannot read tag table (directory) from profile file \"";
 		message += filepath;
 		message += L"\".\r\n\r\n";
@@ -1111,6 +1281,10 @@ wstring Profile::LoadFullProfile(bool forceReload) {
 	for (size_t i = 0; i < TagCount; ++i) {
 		unsigned __int64 testSize = TagTable[i].Offset + TagTable[i].Size;
 		if ( testSize > static_cast<unsigned __int64>(ProfileSize.QuadPart) ) {
+
+			// We should erase any traces of good stuff at this point ... TODO
+			//
+			failed = true;
 			wstring message = L"File \"";
 			message += filepath;
 			message += L"\" is not a valid ICC profile.\r\nThe tag '";
@@ -1161,6 +1335,7 @@ wstring Profile::LoadFullProfile(bool forceReload) {
 		moveTo.HighPart = 0;
 		bRet = SetFilePointerEx(hFile, moveTo, NULL, FILE_BEGIN);
 		if ( 0 == bRet ) {
+			failed = true;
 			wstring message = L"Cannot read 'vcgt' tag from profile file \"";
 			message += filepath;
 			message += L"\".\r\n\r\n";
@@ -1172,6 +1347,7 @@ wstring Profile::LoadFullProfile(bool forceReload) {
 		pVCGT = reinterpret_cast<VCGT_HEADER *>(new BYTE[TagTable[vcgtIndex].Size]);
 		bRet = ReadFile(hFile, pVCGT, TagTable[vcgtIndex].Size, &cb, NULL);
 		if ( 0 == bRet ) {
+			failed = true;
 			wstring message = L"Cannot read 'vcgt' tag from profile file \"";
 			message += filepath;
 			message += L"\".\r\n\r\n";
@@ -1191,6 +1367,7 @@ wstring Profile::LoadFullProfile(bool forceReload) {
 			// Sanity test the vcgt table
 			//
 			if (3 != vcgtHeader.vcgtContents.t.vcgtChannels) {
+				failed = true;
 				wstring message = L"File \"";
 				message += filepath;
 				message += L"\" is not a valid ICC profile.\r\nThe 'vcgt' table header indicates a color table using ";
@@ -1206,6 +1383,7 @@ wstring Profile::LoadFullProfile(bool forceReload) {
 				return ErrorString;
 			}
 			if (256 != vcgtHeader.vcgtContents.t.vcgtCount) {
+				failed = true;
 				wstring message = L"File \"";
 				message += filepath;
 				message += L"\" is not a valid ICC profile.\r\nThe 'vcgt' table header indicates a color table using ";
@@ -1221,6 +1399,7 @@ wstring Profile::LoadFullProfile(bool forceReload) {
 				return ErrorString;
 			}
 			if ( (2 != vcgtHeader.vcgtContents.t.vcgtItemSize) && (1 != vcgtHeader.vcgtContents.t.vcgtItemSize) ) {
+				failed = true;
 				wstring message = L"File \"";
 				message += filepath;
 				message += L"\" is not a valid ICC profile.\r\nThe 'vcgt' table header indicates a color table using ";
@@ -1239,6 +1418,7 @@ wstring Profile::LoadFullProfile(bool forceReload) {
 							vcgtHeader.vcgtContents.t.vcgtCount *
 							vcgtHeader.vcgtContents.t.vcgtItemSize + 12;
 			if ( testSize > TagTable[vcgtIndex].Size ) {
+				failed = true;
 				wstring message = L"File \"";
 				message += filepath;
 				message += L"\" is not a valid ICC profile.\r\nThe 'vcgt' data indicates a color table size (";
@@ -1449,6 +1629,7 @@ wstring Profile::LoadFullProfile(bool forceReload) {
 		moveTo.HighPart = 0;
 		bRet = SetFilePointerEx(hFile, moveTo, NULL, FILE_BEGIN);
 		if ( 0 == bRet ) {
+			failed = true;
 			wstring message = L"Cannot read 'MS00' tag from profile file \"";
 			message += filepath;
 			message += L"\".\r\n\r\n";
@@ -1529,6 +1710,7 @@ bool Profile::ShowShortTagContents(TAG_TABLE_ENTRY * tagEntry, wstring & outputT
 	BYTE * bytePtr;
 	DWORD byteCount;
 	wchar_t buf[1024];
+	wchar_t displayChars[5];
 	bool haveText = false;
 	outputText.clear();
 
@@ -1572,10 +1754,11 @@ bool Profile::ShowShortTagContents(TAG_TABLE_ENTRY * tagEntry, wstring & outputT
 			// The saddest part of this is that the only examples I've found of profiles that use the
 			// Unicode portion do it completely differently.  Microsoft botches it completely, placing
 			// a doubled byte count in front of the ASCII portion so that their count must be divided by
-			// two in order even find the Unicode portion.  Once there, Microsoft interpreted the spec's
+			// two in order to even find the Unicode portion.  Once there, Microsoft interpreted the spec's
 			// phrase "Unicode language code" to means a language/country-code combination such as "enUS"
 			// for "English, United States".  Kodak had a different idea, and stored 0x00 0x64 0x00 0x00.
-			// I have no idea what that means.  As a big-endian number, that's 6553600 in decimal.
+			// I have no idea what that means.  At least in the version 4.2.0.0 ICC spec, they tell you
+			// what is supposed to go in that version's Unicode locale specifiers.
 			// 
 			// So, since the only reliable string stored in this stupid structure is the NUL-terminated
 			// ASCII (and don't trust the length, because Microsoft strews that up), that's what I'll use.
@@ -1590,13 +1773,18 @@ bool Profile::ShowShortTagContents(TAG_TABLE_ENTRY * tagEntry, wstring & outputT
 				bytePtr[tagEntry->Size] = 0;
 				if (ReadProfileBytes(tagEntry->Offset, tagEntry->Size, bytePtr)) {
 					descTagStruct = reinterpret_cast<descType *>(bytePtr);
+#define INCLUDE_VALIDATION_COMPLAINT 0
+#if INCLUDE_VALIDATION_COMPLAINT
 					DWORD asciiCount = swap32(descTagStruct->AsciiLength);
+#endif
 					wchar_t * wideString;
 					if (AnsiToUnicode(descTagStruct->Text, wideString)) {
+#if INCLUDE_VALIDATION_COMPLAINT
 						size_t trueStringLength = StringLength(wideString);
 						if ( asciiCount != (1 + trueStringLength) ) {
 							outputText = L":  Validation error: ASCII length incorrect";
 						}
+#endif
 						outputText += L":  \"";
 						outputText += wideString;
 						outputText += L"\"";
@@ -1605,25 +1793,6 @@ bool Profile::ShowShortTagContents(TAG_TABLE_ENTRY * tagEntry, wstring & outputT
 					}
 				}
 				free(bytePtr);
-			}
-			break;
-
-		case 'XYZ ':
-			if ( 20 == tagEntry->Size ) {
-				CIEXYZ cie;
-				if (ReadProfileBytes(tagEntry->Offset + 8, sizeof(cie), reinterpret_cast<BYTE *>(&cie))) {
-					StringCbPrintf(
-							buf,
-							sizeof(buf),
-							L":  X=%6.4f, Y=%6.4f, Z=%6.4f",
-							double(swap32(cie.ciexyzX)) / double(65536),
-							double(swap32(cie.ciexyzY)) / double(65536),
-							double(swap32(cie.ciexyzZ)) / double(65536) );
-					outputText = buf;
-					haveText = true;
-				}
-			} else {
-				haveText = ShowTagTypeDescription(tagEntry, outputText);
 			}
 			break;
 
@@ -1690,11 +1859,6 @@ bool Profile::ShowShortTagContents(TAG_TABLE_ENTRY * tagEntry, wstring & outputT
 								foundIt = true;
 								break;
 							}
-
-							// The ICC 4.2.0.0 spec (ICC.1:2004-10, paragraph 10.13) asks that we allow for future growth
-							// in the per-language entries by using the "size" parameter to skip from entry to entry.  This
-							// makes for ugly C++ code, but whatever ...
-							//
 							mlucEntryPtr = reinterpret_cast<mlucEntryType *>(entrySize + reinterpret_cast<BYTE *>(mlucEntryPtr));
 						}
 					}
@@ -1717,6 +1881,160 @@ bool Profile::ShowShortTagContents(TAG_TABLE_ENTRY * tagEntry, wstring & outputT
 					}
 				}
 				free(bytePtr);
+			}
+			break;
+
+		case 'XYZ ':
+			if ( 20 == tagEntry->Size ) {
+				CIEXYZ cie;
+				if (ReadProfileBytes(tagEntry->Offset + 8, sizeof(cie), reinterpret_cast<BYTE *>(&cie))) {
+					StringCbPrintf(
+							buf,
+							sizeof(buf),
+							L":  X=%6.4f, Y=%6.4f, Z=%6.4f",
+							double(swap32(cie.ciexyzX)) / double(65536),
+							double(swap32(cie.ciexyzY)) / double(65536),
+							double(swap32(cie.ciexyzZ)) / double(65536) );
+					outputText = buf;
+					haveText = true;
+				}
+			} else {
+				haveText = ShowTagTypeDescription(tagEntry, outputText);
+			}
+			break;
+
+		case 'curv':
+			if ( 14 == tagEntry->Size ) {
+				curvType curve;
+				if (ReadProfileBytes(tagEntry->Offset, sizeof(curve), reinterpret_cast<BYTE *>(&curve))) {
+					StringCbPrintf(
+							buf,
+							sizeof(buf),
+							L":  gamma=%6.4f",
+							double(swap16(curve.Entries[0])) / double(256) );
+					outputText = buf;
+					haveText = true;
+				}
+			} else {
+				haveText = ShowTagTypeDescription(tagEntry, outputText);
+			}
+			break;
+
+		case 'meas':
+			if ( sizeof(measType) == tagEntry->Size ) {
+				measType measurements;
+				if (ReadProfileBytes(tagEntry->Offset, sizeof(measurements), reinterpret_cast<BYTE *>(&measurements))) {
+					const wchar_t * observer = LookupName( knownObservers, _countof(knownObservers), swap32(measurements.Observer) );
+					const wchar_t * geometry = LookupName( knownGeometry, _countof(knownGeometry), swap32(measurements.Geometry) );
+					const wchar_t * illuminant = LookupName( knownIlluminants, _countof(knownIlluminants), swap32(measurements.Illuminant) );
+					StringCbPrintf(
+							buf,
+							sizeof(buf),
+							L":  observer=%s, backing X=%6.4f, Y=%6.4f, Z=%6.4f, geometry=%s, flare=%.2f%%, illuminant=%s",
+							observer,
+							double(swap32(measurements.Backing.ciexyzX)) / double(65536),
+							double(swap32(measurements.Backing.ciexyzY)) / double(65536),
+							double(swap32(measurements.Backing.ciexyzZ)) / double(65536),
+							geometry,
+							double(100 * swap32(measurements.Flare)) / double(65536),
+							illuminant );
+					outputText = buf;
+					haveText = true;
+				}
+			} else {
+				haveText = ShowTagTypeDescription(tagEntry, outputText);
+			}
+			break;
+
+		case 'view':
+			if ( sizeof(viewType) == tagEntry->Size ) {
+				viewType view;
+				if (ReadProfileBytes(tagEntry->Offset, sizeof(view), reinterpret_cast<BYTE *>(&view))) {
+					const wchar_t * illuminant = LookupName( knownIlluminants, _countof(knownIlluminants), swap32(view.Illuminant) );
+					StringCbPrintf(
+							buf,
+							sizeof(buf),
+							L":  illuminant X=%6.4f, Y=%6.4f, Z=%6.4f, surround X=%6.4f, Y=%6.4f, Z=%6.4f, illuminant=%s",
+							double(swap32(view.IlluminantXYZ.ciexyzX)) / double(65536),
+							double(swap32(view.IlluminantXYZ.ciexyzY)) / double(65536),
+							double(swap32(view.IlluminantXYZ.ciexyzZ)) / double(65536),
+							double(swap32(view.SurroundXYZ.ciexyzX)) / double(65536),
+							double(swap32(view.SurroundXYZ.ciexyzY)) / double(65536),
+							double(swap32(view.SurroundXYZ.ciexyzZ)) / double(65536),
+							illuminant );
+					outputText = buf;
+					haveText = true;
+				}
+			} else {
+				haveText = ShowTagTypeDescription(tagEntry, outputText);
+			}
+			break;
+
+		case 'sig ':
+			if ( sizeof(signatureType) == tagEntry->Size ) {
+				signatureType signature;
+				if (ReadProfileBytes(tagEntry->Offset, sizeof(signature), reinterpret_cast<BYTE *>(&signature))) {
+					if ( 'tech' == tagEntry->Signature ) {
+						const wchar_t * technology = LookupName( knownTechnologies, _countof(knownTechnologies), swap32(signature.Signature) );
+						StringCbPrintf(buf, sizeof(buf), L":  %s", technology);
+					} else {
+						ConvertFourBytesForDisplay(signature.Signature, displayChars, sizeof(displayChars));
+						StringCbPrintf(buf, sizeof(buf), L":  Signature='%s'", displayChars);
+					}
+					outputText = buf;
+					haveText = true;
+				}
+			} else {
+				haveText = ShowTagTypeDescription(tagEntry, outputText);
+			}
+			break;
+
+		case 'sf32':
+			if ( ('chad' == tagEntry->Signature) && (sizeof(chadsf32Type) == tagEntry->Size) ) {
+				chadsf32Type chad;
+				if (ReadProfileBytes(tagEntry->Offset, sizeof(chad), reinterpret_cast<BYTE *>(&chad))) {
+					StringCbPrintf(
+							buf,
+							sizeof(buf),
+							L":  { {%6.4f, %6.4f, %6.4f}, {%6.4f, %6.4f, %6.4f}, {%6.4f, %6.4f, %6.4f} }",
+							double(static_cast<signed int>(swap32(chad.a0))) / double(65536),
+							double(static_cast<signed int>(swap32(chad.a1))) / double(65536),
+							double(static_cast<signed int>(swap32(chad.a2))) / double(65536),
+
+							double(static_cast<signed int>(swap32(chad.a3))) / double(65536),
+							double(static_cast<signed int>(swap32(chad.a4))) / double(65536),
+							double(static_cast<signed int>(swap32(chad.a5))) / double(65536),
+
+							double(static_cast<signed int>(swap32(chad.a6))) / double(65536),
+							double(static_cast<signed int>(swap32(chad.a7))) / double(65536),
+							double(static_cast<signed int>(swap32(chad.a8))) / double(65536) );
+					outputText = buf;
+					haveText = true;
+				}
+			} else {
+				haveText = ShowTagTypeDescription(tagEntry, outputText);
+			}
+			break;
+
+		case 'dtim':
+			if ( 20 == tagEntry->Size ) {
+				dateTimeNumber dateTime;
+				if (ReadProfileBytes(tagEntry->Offset + 8, sizeof(dateTime), reinterpret_cast<BYTE *>(&dateTime))) {
+					StringCbPrintf(
+							buf,
+							sizeof(buf),
+							L":  %04d-%02d-%02d %02d:%02d:%02dZ", // RFC3389, NOTE: in 5.6
+							swap16(dateTime.year),
+							swap16(dateTime.month),
+							swap16(dateTime.day),
+							swap16(dateTime.hour),
+							swap16(dateTime.minute),
+							swap16(dateTime.second) );
+					outputText = buf;
+					haveText = true;
+				}
+			} else {
+				haveText = ShowTagTypeDescription(tagEntry, outputText);
 			}
 			break;
 
@@ -1747,12 +2065,12 @@ wstring Profile::DetailsString(void) {
 	// If we haven't yet read the profile, try to do it now.
 	// If it fails, report the error.
 	//
-	if ( !ErrorString.empty() ) {
+	if ( failed || !ErrorString.empty() ) {
 		return ErrorString;
 	}
 	if ( 0 == ProfileSize.QuadPart ) {
 		LoadFullProfile(false);
-		if ( !ErrorString.empty() ) {
+		if ( failed || !ErrorString.empty() ) {
 			return ErrorString;
 		}
 	}
@@ -1768,6 +2086,7 @@ wstring Profile::DetailsString(void) {
 	if (ColorDirectory) {
 		StringCbCopy(filepath, sizeof(filepath), ColorDirectory);
 	} else {
+		failed = true;
 		ErrorString = ColorDirectoryErrorString;
 		return ErrorString;
 	}
@@ -1964,10 +2283,21 @@ wstring Profile::DetailsString(void) {
 		s += buf;
 
 		// GretagMacbeth/X-Rite likes to use the 'text' type for some of their private tags, so don't
-		// fill the screen with stuff that isn't useful ... only display 'text' for 'cprt' (copyright)
+		// fill the screen with stuff that isn't useful ... only display 'text' for certain known tags
 		//
-		if ( ('text' == reinterpret_cast<TAG_TABLE_ENTRY *>(sortedTags[i])->Type) && ('cprt' != tagSignature) ) {
-			additionalText = ShowTagTypeDescription(reinterpret_cast<TAG_TABLE_ENTRY *>(sortedTags[i]), moreText);
+		if ( 'text' == reinterpret_cast<TAG_TABLE_ENTRY *>(sortedTags[i])->Type ) {
+			switch (tagSignature) {
+				case 'cprt':
+				case 'targ':
+				case 'dmdd':
+				case 'dmnd':
+					additionalText = ShowShortTagContents(reinterpret_cast<TAG_TABLE_ENTRY *>(sortedTags[i]), moreText);
+					break;
+
+				default:
+					additionalText = ShowTagTypeDescription(reinterpret_cast<TAG_TABLE_ENTRY *>(sortedTags[i]), moreText);
+					break;
+			}
 		} else {
 			additionalText = ShowShortTagContents(reinterpret_cast<TAG_TABLE_ENTRY *>(sortedTags[i]), moreText);
 		}
@@ -1977,10 +2307,8 @@ wstring Profile::DetailsString(void) {
 		s += L"\r\n";
 	}
 
-	if (-1 == vcgtIndex) {
-		s += L"\r\nProfile does not include a Video Card Gamma Tag\r\n";
-	} else {
-		s += L"\r\nProfile includes a Video Card Gamma Tag:\r\n  Type: ";
+	if (-1 != vcgtIndex) {
+		s += L"\r\nProfile includes a video card gamma tag:\r\n  Type: ";
 		if (VCGT_TYPE_TABLE == vcgtHeader.vcgtType) {
 			s += L"Table";
 			StringCbPrintf(buf, sizeof(buf), L"\r\n  Channels: %d", vcgtHeader.vcgtContents.t.vcgtChannels);

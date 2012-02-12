@@ -19,14 +19,14 @@ wstring HexDump(const LPBYTE data, size_t size, size_t rowWidth) {
 		StringCchPrintf(buf, _countof(buf), L"0x%04x | ", j);
 		s += buf;
 		l = min(i+rowWidth, size);			// Calculate last position for this row
-		for (k = i; k < l; k++) {			// Print (up to) ROW_WIDTH hex bytes
+		for (k = i; k < l; ++k) {			// Print (up to) ROW_WIDTH hex bytes
 			StringCchPrintf(buf, _countof(buf), L"%02x ", data[k]);
 			s += buf;
 		}
-		for (; k < (i+rowWidth); k++) {		// Handle partial last line
+		for (; k < (i+rowWidth); ++k) {		// Handle partial last line
 			s += L"   ";					// Print spaces to align ANSI part
 		}
-		for (k = i; k < l; k++) {			// Print (up to) rowWidth ANSI characters
+		for (k = i; k < l; ++k) {			// Print (up to) rowWidth ANSI characters
 			int wch = static_cast<int>(data[k]);
 			if ( (wch < 32) || ( (wch > 126) && (wch < 161) ) ) {
 				s += L".";					// Non-printable using Courier New font, print a period instead
@@ -274,9 +274,10 @@ bool AnsiToUnicode(char * AnsiText, wchar_t * & RefUnicodeText, DWORD codePage) 
 	return success;
 }
 
-// Convert a big-endian Unicode string to x86-style little-endian Unicode (what Windows likes)
-// The caller must pass us a NUL-terminated BE Unicode string, and must free the buffer we
-// allocate on his behalf.  We use malloc(), he should use free().
+// Convert a Unicode string from big-endian to little-endian or the other way around.  Pass in
+// a length in characters to deal with non-NUL-terminated input strings, or use the default -1
+// "length" to make us determine the length of the NUL-terminated input string.  The caller must
+// free the buffer we allocate on his behalf.  We use malloc(), he should use free().
 //
 bool ByteSwapUnicode(wchar_t * InputUnicodeText, wchar_t * & RefOutputUnicodeText, size_t InputLengthInCharacters) {
 	bool success = false;

@@ -176,7 +176,7 @@ void RestoreSettings(HWND hWnd) {
 						reinterpret_cast<BYTE *>(buf2),
 						&dataSize)
 				) {
-					if ( (REG_SZ == dataType) && (12 == dataSize) ) {
+					if ( (REG_SZ == dataType) && (dataSize < 32) ) {
 						page->SetTreeViewNodeExpansionString(buf2);
 					}
 				}
