@@ -22,6 +22,7 @@ public:
 	static Monitor * Add(Monitor * monitor);
 	static void ClearList(bool freeAllMemory);
 
+	bool SetDefaultProfile(Profile * profile, bool userProfile, wstring & errorString);
 	void SetMonitorPage(MonitorPage * pagePtr);
 	MonitorPage * GetMonitorPage(void);
 	void SetMonitorSummaryItem(MonitorSummaryItem * itemPtr);

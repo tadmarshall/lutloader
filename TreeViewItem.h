@@ -19,7 +19,8 @@ typedef enum tag_TREEVIEW_ITEM_TYPE {
 	TREEVIEW_ITEM_TYPE_USER_PROFILES = 2,		// "User profiles" node, for Vista and later
 	TREEVIEW_ITEM_TYPE_SYSTEM_PROFILES = 3,		// "System profiles" node, for Vista and later
 	TREEVIEW_ITEM_TYPE_PROFILES = 4,			// "Profiles" node, for Windows XP
-	TREEVIEW_ITEM_TYPE_PROFILE = 5,				// A named profile file
+	TREEVIEW_ITEM_TYPE_USER_PROFILE = 5,		// A user profile file
+	TREEVIEW_ITEM_TYPE_SYSTEM_PROFILE = 6		// A system profile file (or any XP profile)
 } TREEVIEW_ITEM_TYPE;
 
 class TreeViewItem {
@@ -31,6 +32,7 @@ public:
 	void SetMonitor(Monitor * monitor);
 	void SetProfile(Profile * profile);
 	void Handle_TVN_SELCHANGEDW(MonitorPage * monitorPage, NMTREEVIEWW * pNMTREEVIEWW);
+	void Handle_WM_CONTEXTMENU(MonitorPage * monitorPage, POINT * screenClickPoint);
 
 private:
 	wstring				ItemText;

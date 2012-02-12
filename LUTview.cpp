@@ -196,7 +196,7 @@ LRESULT CALLBACK LUTview::LUTviewWndProc(HWND hWnd, UINT uMessage, WPARAM wParam
 
 		case WM_CONTEXTMENU:
 			thisView = reinterpret_cast<LUTview *>(static_cast<LONG_PTR>(GetWindowLongPtr(hWnd, 0)));
-			if (thisView->userCanChangeDisplayMode && thisView->pLUT) {
+			if ( thisView && thisView->userCanChangeDisplayMode && thisView->pLUT ) {
 				POINT pt;
 				pt.x = static_cast<signed short>(LOWORD(lParam));
 				pt.y = static_cast<signed short>(HIWORD(lParam));
@@ -210,13 +210,19 @@ LRESULT CALLBACK LUTview::LUTviewWndProc(HWND hWnd, UINT uMessage, WPARAM wParam
 					int flags = TPM_LEFTALIGN | TPM_TOPALIGN | TPM_NONOTIFY | TPM_RETURNCMD | TPM_RIGHTBUTTON | TPM_NOANIMATION;
 					HMENU hMenu = LoadMenu(g_hInst, MAKEINTRESOURCE(IDR_LUTVIEW_POPUP_MENU));
 					HMENU hPopup = GetSubMenu(hMenu, 0);
+					MENUINFO menuInfo;
+					SecureZeroMemory(&menuInfo, sizeof(menuInfo));
+					menuInfo.cbSize = sizeof(menuInfo);
+					menuInfo.fMask = MIM_BACKGROUND;
+					menuInfo.hbrBack = (HBRUSH)GetStockObject(WHITE_BRUSH);
+					SetMenuInfo(hPopup, &menuInfo);
 					CheckMenuRadioItem(
 							hPopup,
 							ID_WHITEBACKGROUND,
 							ID_GRADIENTBACKGROUND,
 							ID_WHITEBACKGROUND + thisView->graphDisplayStyle,
 							MF_BYCOMMAND );
-					int id = TrackPopupMenu(hPopup, flags, pt.x, pt.y, 0, hWnd, NULL);
+					int id = TrackPopupMenuEx(hPopup, flags, pt.x, pt.y, hWnd, NULL);
 					if ( id >= ID_WHITEBACKGROUND && id <= ID_GRADIENTBACKGROUND ) {
 						thisView->graphDisplayStyle = static_cast<LUT_GRAPH_DISPLAY_STYLE>(id - ID_WHITEBACKGROUND);
 						thisView->updateBitmap = true;

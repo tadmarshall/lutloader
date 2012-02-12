@@ -2,6 +2,7 @@
 //
 
 #include "stdafx.h"
+#include <winreg.h>
 #include "Adapter.h"
 #include "Monitor.h"
 #include "MonitorPage.h"
@@ -91,24 +92,44 @@ void Monitor::Initialize(void) {
 
 	// Find all associated profiles
 	//
-	wchar_t registryKey[512];
+	wchar_t registryKey[1024];
 	int len;
 	if ( VistaOrHigher() ) {
 
 		// Vista or higher, set up user profile, if any
 		//
 		len = lstrlenW(L"\\Registry\\Machine\\System\\CurrentControlSet\\Control\\Class");
-		wcscpy_s( registryKey, _countof(registryKey),
+		StringCbCopy( registryKey, sizeof(registryKey),
 			L"Software\\Microsoft\\Windows NT\\CurrentVersion\\ICM\\ProfileAssociations\\Display");
-		wcscat_s(registryKey, _countof(registryKey), &DeviceKey.c_str()[len]);
+		StringCbCat(registryKey, sizeof(registryKey), &DeviceKey.c_str()[len]);
 		UserProfile = Profile::GetAllProfiles(HKEY_CURRENT_USER, registryKey, &activeProfileIsUserProfile, UserProfileList);
 	}
 
 	// Set up SystemProfile for any supported OS (this will be the only profile for XP)
 	//
 	len = lstrlenW(L"\\Registry\\Machine\\");
-	wcscpy_s(registryKey, _countof(registryKey), &DeviceKey.c_str()[len]);
+	StringCbCopy(registryKey, sizeof(registryKey), &DeviceKey.c_str()[len]);
 	SystemProfile = Profile::GetAllProfiles(HKEY_LOCAL_MACHINE, registryKey, 0, SystemProfileList);
+}
+
+bool Monitor::SetDefaultProfile(Profile * profile, bool userProfile, wstring & errorString) {
+	wchar_t registryKey[1024];
+	int len;
+	bool success;
+	if ( userProfile ) {
+		len = lstrlenW(L"\\Registry\\Machine\\System\\CurrentControlSet\\Control\\Class");
+		StringCbCopy( registryKey, sizeof(registryKey),
+			L"Software\\Microsoft\\Windows NT\\CurrentVersion\\ICM\\ProfileAssociations\\Display");
+		StringCbCat(registryKey, sizeof(registryKey), &DeviceKey.c_str()[len]);
+		success = profile->SetDefaultProfile(HKEY_CURRENT_USER, registryKey, errorString);
+		UserProfile = profile;
+	} else {
+		len = lstrlenW(L"\\Registry\\Machine\\");
+		StringCbCopy(registryKey, sizeof(registryKey), &DeviceKey.c_str()[len]);
+		success = profile->SetDefaultProfile(HKEY_LOCAL_MACHINE, registryKey, errorString);
+		SystemProfile = profile;
+	}
+	return success;
 }
 
 // Vector of monitors

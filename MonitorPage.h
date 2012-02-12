@@ -16,6 +16,7 @@ public:
 	MonitorPage(Monitor * hostMonitor);
 	~MonitorPage();
 
+	HWND GetHWND(void) const;
 	void SetEditControlText(wstring newText);
 	Monitor * GetMonitor(void) const;
 	void Reset(void);

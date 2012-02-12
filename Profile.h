@@ -36,6 +36,7 @@ public:
 	wstring DetailsString(void);
 	LUT_COMPARISON CompareLUT(LUT * otherLUT, DWORD * maxError, DWORD * totalError);
 	bool HasEmbeddedWcsProfile(void);
+	bool SetDefaultProfile(HKEY hKeyBase, const wchar_t * registryKey, wstring & errorString);
 
 	static Profile * GetAllProfiles(HKEY hKeyBase, const wchar_t * registryKey, bool * perUser, ProfileList & profileList);
 

@@ -262,6 +262,84 @@ Profile * Profile::GetAllProfiles(HKEY hKeyBase, const wchar_t * registryKey, bo
 	return profile;
 }
 
+bool Profile::SetDefaultProfile(HKEY hKeyBase, const wchar_t * registryKey, wstring & errorString) {
+	wchar_t profileName[1024];
+	HKEY hKey;
+	DWORD dataSize;
+	DWORD dataType;
+	bool success = false;
+	errorString.clear();
+
+	StringCbCopy(profileName, sizeof(profileName), ProfileName.c_str());
+	if (ERROR_SUCCESS == RegOpenKeyEx(hKeyBase, registryKey, 0, KEY_QUERY_VALUE | KEY_SET_VALUE, &hKey)) {
+		if (ERROR_SUCCESS == RegQueryValueEx(hKey, L"ICMProfile", NULL, NULL, NULL, &dataSize)) {
+			dataSize += 2 * sizeof(wchar_t);
+			BYTE * fromList = reinterpret_cast<BYTE *>(malloc(dataSize));
+			BYTE * toList = reinterpret_cast<BYTE *>(malloc(dataSize));
+			if ( fromList && toList ) {
+				SecureZeroMemory(fromList, dataSize);
+				SecureZeroMemory(toList, dataSize);
+				RegQueryValueEx(hKey, L"ICMProfile", NULL, &dataType, fromList, &dataSize);
+				wchar_t * fromPtr = reinterpret_cast<wchar_t *>(fromList);
+				wchar_t * toPtr = reinterpret_cast<wchar_t *>(toList);
+				wchar_t * fp;
+				wchar_t * pn;
+
+				// Copy profiles that do not match the given profile name
+				//
+				while (*fromPtr) {
+					fp = fromPtr;
+					pn = profileName;
+
+					// Compare strings until we hit a difference or a NUL in either string
+					//
+					while ( *fp && *pn && (*fp == *pn) ) {
+						++pn;
+						++fp;
+					}
+					if ( *fp == *pn ) {
+
+						// The strings matched, so just skip over the source string
+						//
+						fromPtr = fp + 1;
+					} else {
+
+						// The strings did not match, so copy this one
+						//
+						while (*fromPtr) {
+							*toPtr++ = *fromPtr++;
+						}
+						++fromPtr;
+						++toPtr;
+					}
+				}
+
+				// We are done reading and skipping, now copy the profile name to the end
+				//
+				pn = profileName;
+				while (*pn) {
+					*toPtr++ = *pn++;
+				}
+				*toPtr++ = 0;		// End string with two NULs
+				*toPtr++ = 0;
+
+				// Write the modified profile list to the registry
+				//
+				dataSize = static_cast<DWORD>(reinterpret_cast<BYTE *>(toPtr) - toList);
+				success = (ERROR_SUCCESS == RegSetValueEx(hKey, L"ICMProfile", NULL, dataType, toList, dataSize));
+			}
+			if (fromList) {
+				free(fromList);
+			}
+			if (toList) {
+				free(toList);
+			}
+		}
+		RegCloseKey(hKey);
+	}
+	return success;
+}
+
 // Load profile info from disk
 //
 wstring Profile::LoadFullProfile(bool forceReload) {
