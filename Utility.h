@@ -29,3 +29,5 @@ const wchar_t * LookupName(
 	DWORD tableSize,
 	DWORD identifier );
 HFONT GetFont(HDC hdc, FONT_CLASS fontClass, bool newCopy = false);
+bool AnsiToUnicode(char * AnsiText, wchar_t * & RefUnicodeText, DWORD codePage = CP_ACP);
+bool ByteSwapUnicode(wchar_t * InputUnicodeText, wchar_t * & RefOutputUnicodeText, size_t InputLengthInCharacters = -1);

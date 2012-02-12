@@ -7,6 +7,10 @@
 #include "LUT.h"
 #include "VideoCardGammaTag.h"
 
+// Optional "features"
+//
+#define READ_EMBEDDED_WCS_PROFILE 0
+
 // Forward references
 //
 class Profile;
@@ -15,10 +19,17 @@ typedef vector <Profile *> ProfileList;
 
 // An entry in the tag table
 //
-typedef struct tag_TAG_TABLE_ENTRY {
+typedef struct tag_EXTERNAL_TAG_TABLE_ENTRY {		// As stored in a profile file
 	DWORD		Signature;
 	DWORD		Offset;
 	DWORD		Size;
+} EXTERNAL_TAG_TABLE_ENTRY;
+
+typedef struct tag_TAG_TABLE_ENTRY {				// As maintained in memory
+	DWORD		Signature;
+	DWORD		Offset;
+	DWORD		Size;
+	DWORD		Type;
 } TAG_TABLE_ENTRY;
 
 class Profile {
@@ -42,6 +53,11 @@ public:
 	static Profile * GetAllProfiles(HKEY hKeyBase, const wchar_t * registryKey, bool * perUser, ProfileList & profileList);
 
 private:
+	bool ShowTagTypeDescription(TAG_TABLE_ENTRY * tagEntry, wstring & outputText);
+	bool ShowShortTagContents(TAG_TABLE_ENTRY * tagEntry, wstring & outputText);
+	bool ReadProfileBytes(DWORD offset, DWORD byteCount, BYTE * returnedBytePtr);
+	bool ReadProfileBytesFromOpenFile(HANDLE hFile, DWORD offset, DWORD byteCount, BYTE * returnedBytePtr);
+
 	wstring				ProfileName;					// Name of profile file without path
 	bool				loaded;							// 'true' if already loaded from disk
 	wstring				ErrorString;					// If LoadFullProfile() fails, record error here
@@ -50,13 +66,15 @@ private:
 	PROFILEHEADER *		ProfileHeader;					// Header (128 bytes)
 	DWORD				TagCount;						// Count of tags in profile
 	TAG_TABLE_ENTRY *	TagTable;						// Table of tags
-	DWORD * *			sortedTags;						// Index into tags table in a sorted order
+	DWORD * *			sortedTags;						// Pointers into tags table in a sorted order
 	int					vcgtIndex;						// Location of VCGT tag in TagTable, or -1
 	VCGT_HEADER *		pVCGT;							// Video Card Gamma Tag structure as on disk
 	VCGT_HEADER			vcgtHeader;						// A byte-swapped version for us to use
 	LUT *				pLUT;							// A byte-swapped copy of the LUT from the vcgt
 	int					wcsProfileIndex;				// Location of WCS tag in TagTable, or -1
+#if READ_EMBEDDED_WCS_PROFILE
 	wstring				WCS_ColorDeviceModel;			// XML copied from WCS profile
 	wstring				WCS_ColorAppearanceModel;
 	wstring				WCS_GamutMapModel;
+#endif
 };

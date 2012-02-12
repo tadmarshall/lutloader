@@ -20,7 +20,9 @@ typedef enum tag_TREEVIEW_ITEM_TYPE {
 	TREEVIEW_ITEM_TYPE_SYSTEM_PROFILES = 3,		// "System profiles" node, for Vista and later
 	TREEVIEW_ITEM_TYPE_PROFILES = 4,			// "Profiles" node, for Windows XP
 	TREEVIEW_ITEM_TYPE_USER_PROFILE = 5,		// A user profile file
-	TREEVIEW_ITEM_TYPE_SYSTEM_PROFILE = 6		// A system profile file (or any XP profile)
+	TREEVIEW_ITEM_TYPE_SYSTEM_PROFILE = 6,		// A system profile file (or any XP profile)
+	TREEVIEW_ITEM_TYPE_OTHER_PROFILES = 7,		// "Other installed display profiles" node
+	TREEVIEW_ITEM_TYPE_OTHER_PROFILE = 8		// An installed but non-associated profile
 } TREEVIEW_ITEM_TYPE;
 
 class TreeViewItem {

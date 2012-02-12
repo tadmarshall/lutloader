@@ -9,9 +9,22 @@
 #include <strsafe.h>
 //#include <banned.h>
 
+#include <winnls.h>
+
+// Optional "features"
+//
+#if READ_EMBEDDED_WCS_PROFILE
+#define DISPLAY_EMBEDDED_WCS_PROFILE_IN_SHOW_DETAILS 1
+#else
+#define DISPLAY_EMBEDDED_WCS_PROFILE_IN_SHOW_DETAILS 0
+#endif
+
+// Symbols defined in other files
+//
 extern wchar_t * ColorDirectory;
 extern wchar_t * ColorDirectoryErrorString;
 
+#if READ_EMBEDDED_WCS_PROFILE
 // Reverse engineered embedded WCS profile header
 //
 typedef struct tag_WCS_IN_ICC_HEADER {
@@ -27,6 +40,7 @@ typedef struct tag_WCS_IN_ICC_HEADER {
 	DWORD					wcshdrGMMoffset;	// Offset to Gamut Map Model
 	DWORD					wcshdrGMMsize;		// Size of Gamut Map Model
 } WCS_IN_ICC_HEADER;
+#endif
 
 // ICC encoding of date and time of profile creation
 //
@@ -38,6 +52,35 @@ typedef struct tag_dateTimeNumber {
 	unsigned short		minute;
 	unsigned short		second;
 } dateTimeNumber;
+
+typedef struct tag_textType {
+	DWORD				Type;
+	DWORD				Reserved;
+	char				Text[1];
+} textType;
+
+typedef struct tag_descType {
+	DWORD				Type;
+	DWORD				Reserved;
+	DWORD				AsciiLength;
+	char				Text[1];
+} descType;
+
+typedef struct tag_mlucEntryType {
+	DWORD				LocaleID;		// e.g. 'enUS'
+	//BYTE				Language[2];
+	//BYTE				Country[2];
+	DWORD				LengthInBytes;
+	DWORD				Offset;
+} mlucEntryType;
+
+typedef struct tag_mlucType {
+	DWORD				Type;
+	DWORD				Reserved;
+	DWORD				EntryCount;
+	DWORD				EntrySize;
+	mlucEntryType		Entries[1];
+} mlucType;
 
 // List of CMMs
 //
@@ -150,11 +193,11 @@ const NAME_LOOKUP knownTags[] = {
 	{ 'B2A0',				L"PCS to device perceptual transform" },
 	{ 'B2A1',				L"PCS to device colorimetric transform" },
 	{ 'B2A2',				L"PCS to device saturation transform" },
-	{ 'B2D0',				L"BToD0" },
-	{ 'B2D1',				L"BToD1" },
-	{ 'B2D2',				L"BToD2" },
-	{ 'B2D3',				L"BToD3" },
-	{ 'bfd ',				L"UcrBg" },
+	{ 'B2D0',				L"PCS to device perceptual transform (floating point)" },
+	{ 'B2D1',				L"PCS to device colorimetric transform (floating point)" },
+	{ 'B2D2',				L"PCS to device saturation transform (floating point)" },
+	{ 'B2D3',				L"PCS to device transform (floating point, unbounded XYZ absolute PCS)" },
+	{ 'bfd ',				L"Under color removal and black generation curves" },
 	{ 'bkpt',				L"Media black point" },
 	{ 'bTRC',				L"Blue tone reproduction curve" },
 	{ 'bXYZ',				L"Blue matrix column" },
@@ -167,23 +210,23 @@ const NAME_LOOKUP knownTags[] = {
 	{ 'clro',				L"Colorant order" },
 	{ 'clrt',				L"Colorant table" },
 	{ 'cprt',				L"Copyright" },
-	{ 'crdi',				L"Crd information" },
+	{ 'crdi',				L"Color rendering dictionary information" },
 	{ 'CxF ',				L"GretagMacbeth Color Exchange Format" },
-	{ 'D2B0',				L"DToB0" },
-	{ 'D2B1',				L"DToB1" },
-	{ 'D2B2',				L"DToB2" },
-	{ 'D2B3',				L"DToB3" },
+	{ 'D2B0',				L"Device to PCS perceptual transform (floating point)" },
+	{ 'D2B1',				L"Device to PCS colorimetric transform (floating point)" },
+	{ 'D2B2',				L"Device to PCS saturation transform (floating point)" },
+	{ 'D2B3',				L"Device to PCS transform (floating point, unbounded XYZ absolute PCS)" },
 	{ 'data',				L"Data" },
-	{ 'DDPS',				L"GretagMacbeth Display Device Profile Settings" },
+	{ 'DDPS',				L"GretagMacbeth display device profile settings" },
 	{ 'desc',				L"Profile description" },
 	{ 'DevD',				L"GretagMacbeth private" },
 	{ 'devs',				L"Device settings" },
 	{ 'dmdd',				L"Device model" },
 	{ 'dmnd',				L"Device manufacturer" },
 	{ 'dscm',				L"Profile description multi-lingual" },
-	{ 'dtim',				L"Date time" },
+	{ 'dtim',				L"Date and time" },
 	{ 'fpce',				L"Focal plane colorimetry estimates" },
-	{ 'gamt',				L"Gamut" },
+	{ 'gamt',				L"Out-of-gamut data" },
 	{ 'gmps',				L"GretagMacbeth private" },
 	{ 'gTRC',				L"Green tone reproduction curve" },
 	{ 'gXYZ',				L"Green matrix column" },
@@ -200,15 +243,15 @@ const NAME_LOOKUP knownTags[] = {
 	{ 'pre0',				L"Preview 0" },
 	{ 'pre1',				L"Preview 1" },
 	{ 'pre2',				L"Preview 2" },
-	{ 'ps2i',				L"PostScript 2 rendering intent" },
-	{ 'ps2s',				L"PostScript 2 color space array" },
-	{ 'psd0',				L"PostScript 2 color rendering dictionary 0" },
-	{ 'psd1',				L"PostScript 2 color rendering dictionary 1" },
-	{ 'psd2',				L"PostScript 2 color rendering dictionary 2" },
-	{ 'psd3',				L"PostScript 2 color rendering dictionary 3" },
+	{ 'ps2i',				L"PostScript level 2 rendering intent" },
+	{ 'ps2s',				L"PostScript level 2 color space array" },
+	{ 'psd0',				L"PostScript level 2 color rendering dictionary: perceptual" },
+	{ 'psd1',				L"PostScript level 2 color rendering dictionary: relative colorimetric" },
+	{ 'psd2',				L"PostScript level 2 color rendering dictionary: saturation" },
+	{ 'psd3',				L"PostScript level 2 color rendering dictionary: absolute colorimetric" },
 	{ 'pseq',				L"Profile sequence description" },
 	{ 'psid',				L"Profile sequence ID" },
-	{ 'psvm',				L"PostScript 2 color rendering dictionary VM Size" },
+	{ 'psvm',				L"PostScript level 2 color rendering dictionary VM Size" },
 	{ 'ptcn',				L"Print condition" },
 	{ 'resp',				L"Output response" },
 	{ 'rig0',				L"Perceptual rendering intent gamut" },
@@ -225,12 +268,29 @@ const NAME_LOOKUP knownTags[] = {
 	{ 'vued',				L"Viewing conditions description" },
 	{ 'wtpt',				L"Media white point" }
 	//{ '',				L"" },
-	//{ '',				L"" },
-	//{ '',				L"" },
+};
+
+// List of known tags that have had their names changed starting with version 4.0
+//
+const NAME_LOOKUP knownTagsOldNames[] = {
+	{ 'bXYZ',				L"Blue colorant" },
+	{ 'gXYZ',				L"Green colorant" },
+	{ 'rXYZ',				L"Red colorant" }
 	//{ '',				L"" },
 };
 
-// Constructor
+// List of known tag types
+//
+const NAME_LOOKUP knownTagTypess[] = {
+	{ 'curv',				L"Curve" },
+	{ 'desc',				L"Encoded mixed text" },
+	{ 'mluc',				L"Multi-localized Unicode text" },
+	{ 'text',				L"ASCII text" },
+	{ 'XYZ ',				L"Color in CIEXYZ format" }
+	//{ '',				L"" },
+};
+
+	// Constructor
 //
 Profile::Profile(const wchar_t * profileName) :
 		ProfileName(profileName),
@@ -494,7 +554,7 @@ bool ConvertFourBytesForDisplay(DWORD bytes, __out_bcount(len) wchar_t * output,
 
 // Routine for qsort() to call to help create a sorted index into the tag table
 //
-	int ComparePtrToDWORD(const void * elem1, const void * elem2) {
+int ComparePtrToDWORD(const void * elem1, const void * elem2) {
 		DWORD item1;
 		DWORD item2;
 		const BYTE * ptr1 = *reinterpret_cast<const BYTE * const *>(elem1);
@@ -523,6 +583,52 @@ bool ConvertFourBytesForDisplay(DWORD bytes, __out_bcount(len) wchar_t * output,
 			return 1;
 		}
 	}
+
+// Read raw data from the profile file, return a pointer to the buffer we allocated (malloc)
+//
+bool Profile::ReadProfileBytes(DWORD offset, DWORD byteCount, BYTE * returnedBytePtr) {
+
+	bool success = false;
+
+	// Open the profile file
+	//
+	wchar_t filepath[1024];
+	StringCbCopy(filepath, sizeof(filepath), ColorDirectory);
+	StringCbCat(filepath, sizeof(filepath), L"\\");
+	StringCbCat(filepath, sizeof(filepath), ProfileName.c_str());
+	HANDLE hFile = CreateFileW(filepath, GENERIC_READ, FILE_SHARE_READ, NULL, OPEN_EXISTING, 0, NULL);
+	if (INVALID_HANDLE_VALUE != hFile) {
+		LARGE_INTEGER moveTo;
+		moveTo.LowPart = offset;
+		moveTo.HighPart = 0;
+		BOOL bRet = SetFilePointerEx(hFile, moveTo, NULL, FILE_BEGIN);
+		if (bRet) {
+			DWORD cb;
+			bRet = ReadFile(hFile, returnedBytePtr, byteCount, &cb, NULL);
+			success = (0 != bRet) && (cb == byteCount);
+		}
+		CloseHandle(hFile);
+	}
+	return success;
+}
+
+// Read raw data from the profile file, return a pointer to the buffer we allocated (malloc)
+//
+bool Profile::ReadProfileBytesFromOpenFile(HANDLE hFile, DWORD offset, DWORD byteCount, BYTE * returnedBytePtr) {
+
+	bool success = false;
+
+	LARGE_INTEGER moveTo;
+	moveTo.LowPart = offset;
+	moveTo.HighPart = 0;
+	BOOL bRet = SetFilePointerEx(hFile, moveTo, NULL, FILE_BEGIN);
+	if (bRet) {
+		DWORD cb;
+		bRet = ReadFile(hFile, returnedBytePtr, byteCount, &cb, NULL);
+		success = (0 != bRet) && (cb == byteCount);
+	}
+	return success;
+}
 
 // Load profile info from disk
 //
@@ -583,9 +689,11 @@ wstring Profile::LoadFullProfile(bool forceReload) {
 			pLUT = 0;
 		}
 		wcsProfileIndex = -1;
+#if READ_EMBEDDED_WCS_PROFILE
 		WCS_ColorDeviceModel.clear();
 		WCS_ColorAppearanceModel.clear();
 		WCS_GamutMapModel.clear();
+#endif
 	}
 
 	// Get color directory
@@ -945,7 +1053,7 @@ wstring Profile::LoadFullProfile(bool forceReload) {
 		ErrorString += ValidationFailures;
 		return ErrorString;
 	}
-	DWORD smallestPossibleSize = (testTagCount * sizeof(TAG_TABLE_ENTRY)) + sizeof(PROFILEHEADER) + sizeof(TagCount) + sizeof(DWORD);
+	DWORD smallestPossibleSize = (testTagCount * sizeof(EXTERNAL_TAG_TABLE_ENTRY)) + sizeof(PROFILEHEADER) + sizeof(TagCount) + sizeof(DWORD);
 	if ( smallestPossibleSize > ProfileSize.LowPart ) {
 		wstring message = L"File \"";
 		message += filepath;
@@ -967,11 +1075,12 @@ wstring Profile::LoadFullProfile(bool forceReload) {
 	// The tag count seems reasonable, so read the tag table (directory)
 	//
 	TagCount = testTagCount;
-	TagTable = new TAG_TABLE_ENTRY[TagCount];
-	DWORD tagTableByteCount = TagCount * sizeof(TAG_TABLE_ENTRY);
-	SecureZeroMemory(TagTable, tagTableByteCount);
-	bRet = ReadFile(hFile, TagTable, tagTableByteCount, &cb, NULL);
+	EXTERNAL_TAG_TABLE_ENTRY * diskTagTable = new EXTERNAL_TAG_TABLE_ENTRY[TagCount];
+	DWORD tagTableByteCount = TagCount * sizeof(EXTERNAL_TAG_TABLE_ENTRY);
+	SecureZeroMemory(diskTagTable, tagTableByteCount);
+	bRet = ReadFile(hFile, diskTagTable, tagTableByteCount, &cb, NULL);
 	if ( (0 == bRet) || (cb != tagTableByteCount ) ) {
+		delete [] diskTagTable;
 		wstring message = L"Cannot read tag table (directory) from profile file \"";
 		message += filepath;
 		message += L"\".\r\n\r\n";
@@ -983,19 +1092,19 @@ wstring Profile::LoadFullProfile(bool forceReload) {
 
 	// Store our version of the tag table in little-endian format
 	//
+	TagTable = new TAG_TABLE_ENTRY[TagCount];
+	tagTableByteCount = TagCount * sizeof(TAG_TABLE_ENTRY);
 	for (size_t i = 0; i < TagCount; ++i) {
-		TagTable[i].Signature = swap32(TagTable[i].Signature);
-		TagTable[i].Offset = swap32(TagTable[i].Offset);
-		TagTable[i].Size = swap32(TagTable[i].Size);
+		TagTable[i].Signature = swap32(diskTagTable[i].Signature);
+		TagTable[i].Offset = swap32(diskTagTable[i].Offset);
+		TagTable[i].Size = swap32(diskTagTable[i].Size);
+		TagTable[i].Type = 0;
 	}
 
-	// Generate a sort order for the tags
+	// Free the memory used by the copy of the external tag table
 	//
-	sortedTags = new DWORD *[TagCount];
-	for (size_t i = 0; i < TagCount; ++i) {
-		sortedTags[i] = &TagTable[i].Signature;
-	}
-	qsort(sortedTags, TagCount, sizeof(DWORD *), &ComparePtrToDWORD);
+	delete [] diskTagTable;
+	diskTagTable = 0;
 
 	// Sanity test every tag table entry
 	//
@@ -1027,6 +1136,22 @@ wstring Profile::LoadFullProfile(bool forceReload) {
 			wcsProfileIndex = static_cast<int>(i);
 		}
 	}
+
+	// Every tag fits inside the profile (no bad offsets or sizes), so fetch the tag types
+	//
+	for (size_t i = 0; i < TagCount; ++i) {
+		DWORD tagType;
+		ReadProfileBytesFromOpenFile(hFile, TagTable[i].Offset, sizeof(tagType), reinterpret_cast<BYTE *>(&tagType));
+		TagTable[i].Type = swap32(tagType);
+	}
+
+	// Generate a sort order for the tags
+	//
+	sortedTags = new DWORD * [TagCount];
+	for (size_t i = 0; i < TagCount; ++i) {
+		sortedTags[i] = &TagTable[i].Signature;
+	}
+	qsort(sortedTags, TagCount, sizeof(DWORD *), &ComparePtrToDWORD);
 
 	// If there is a 'vcgt' tag, read it
 	//
@@ -1178,11 +1303,12 @@ wstring Profile::LoadFullProfile(bool forceReload) {
 						// We have a winner!  This is really a 2 byte table mislabeled as a 1 byte table.
 						//
 						treatAsTwoByteTable = true;
-						ValidationFailures += L"The 'vcgt' tag in this profile is badly formed.  The 'vcgt' table header\r\n";
-						ValidationFailures += L"indicates that the color table uses 1 byte per entry, but in fact the table\r\n";
-						ValidationFailures += L"is a 2 byte per entry table.  The table was loaded accounting for this error\r\n";
-						ValidationFailures += L"and should behave correctly as loaded by this program.  This profile may cause\r\n";
-						ValidationFailures += L"problems if its color table is loaded by other LUT loaders.\r\n\r\n";
+						ValidationFailures +=
+								L"The 'vcgt' tag in this profile is badly formed.  The 'vcgt' table header indicates "
+								L"that the color table uses 1 byte per entry, but in fact the table is a 2 byte per "
+								L"entry table.  The table was loaded accounting for this error and will behave "
+								L"correctly as loaded by this program.  This profile may not load or may cause "
+								L"problems with other LUT loaders.\r\n\r\n";
 					}
 				}
 			}
@@ -1317,6 +1443,7 @@ wstring Profile::LoadFullProfile(bool forceReload) {
 		}
 	}
 
+#if READ_EMBEDDED_WCS_PROFILE
 	if (-1 != wcsProfileIndex) {
 		moveTo.LowPart = TagTable[wcsProfileIndex].Offset;
 		moveTo.HighPart = 0;
@@ -1371,9 +1498,234 @@ wstring Profile::LoadFullProfile(bool forceReload) {
 		}
 		delete [] bigBuffer;
 	}
+#endif
+
 	CloseHandle(hFile);
 	ErrorString = s;
 	return s;
+}
+
+// Display information about the contents of a tag
+//
+bool Profile::ShowTagTypeDescription(TAG_TABLE_ENTRY * tagEntry, wstring & outputText) {
+	wchar_t buf[1024];
+	wchar_t displayChars[5];
+	DWORD typeOfTag = swap32(tagEntry->Type);
+	ConvertFourBytesForDisplay(typeOfTag, displayChars, sizeof(displayChars));
+	StringCbPrintf(
+			buf,
+			sizeof(buf),
+			L":  type='%s', %d bytes",
+			displayChars,
+			tagEntry->Size );
+	outputText = buf;
+	return true;
+}
+
+// Display contents of some tags
+//
+bool Profile::ShowShortTagContents(TAG_TABLE_ENTRY * tagEntry, wstring & outputText) {
+
+	BYTE * bytePtr;
+	DWORD byteCount;
+	wchar_t buf[1024];
+	bool haveText = false;
+	outputText.clear();
+
+	switch (tagEntry->Type) {
+
+		case 'text':
+			textType * textTagStruct;
+			byteCount = tagEntry->Size + 1;
+			bytePtr = reinterpret_cast<BYTE *>(malloc(byteCount));
+			if (bytePtr) {
+				bytePtr[tagEntry->Size] = 0;
+				if (ReadProfileBytes(tagEntry->Offset, tagEntry->Size, bytePtr)) {
+					textTagStruct = reinterpret_cast<textType *>(bytePtr);
+					wchar_t * wideString;
+					if (AnsiToUnicode(textTagStruct->Text, wideString)) {
+						outputText = L":  \"";
+						outputText += wideString;
+						outputText += L"\"";
+						free(wideString);
+						haveText = true;
+					}
+				}
+				free(bytePtr);
+			}
+			break;
+
+		case 'desc':
+
+			// This is one of the uglier data structures.  It has three parts ... ASCII, Unicode and
+			// Macintosh ScriptCode.  Each part has a count (4 bytes for ASCII and Unicode, 1 byte
+			// for ScriptCode), but the Unicode and ScriptCode counts and strings are not at fixed
+			// offsets, but rather immediately follow the preceding item.  If the Unicode string is
+			// present, it must be NULL-terminated, but if it is missing it is missing entirely.  The
+			// count byte for the ScriptCode is a count of bytes used in the ScriptCode, but the
+			// ScriptCode "Localizable Macintosh description" portion itself must be exactly 67 bytes
+			// long.  Even Microsoft misread the spec, assuming that the 67 bytes included the 3 byte
+			// header ... it does not, and Windows 7's Windows Display Color Calibration program dccw.exe
+			// produces incorrect 'desc' tags.  The Unicode is big-endian, of course.  All string length
+			// counts include the NUL terminator.
+			//
+			// The saddest part of this is that the only examples I've found of profiles that use the
+			// Unicode portion do it completely differently.  Microsoft botches it completely, placing
+			// a doubled byte count in front of the ASCII portion so that their count must be divided by
+			// two in order even find the Unicode portion.  Once there, Microsoft interpreted the spec's
+			// phrase "Unicode language code" to means a language/country-code combination such as "enUS"
+			// for "English, United States".  Kodak had a different idea, and stored 0x00 0x64 0x00 0x00.
+			// I have no idea what that means.  As a big-endian number, that's 6553600 in decimal.
+			// 
+			// So, since the only reliable string stored in this stupid structure is the NUL-terminated
+			// ASCII (and don't trust the length, because Microsoft strews that up), that's what I'll use.
+			//
+			// Note that this tag type (i.e. format) 'desc' became obsolete with profile version 4.0.  It
+			// was replaced with 'mluc', multi-localized Unicode, hopefully better implemented.
+			//
+			descType * descTagStruct;
+			byteCount = tagEntry->Size + 1;
+			bytePtr = reinterpret_cast<BYTE *>(malloc(byteCount));
+			if (bytePtr) {
+				bytePtr[tagEntry->Size] = 0;
+				if (ReadProfileBytes(tagEntry->Offset, tagEntry->Size, bytePtr)) {
+					descTagStruct = reinterpret_cast<descType *>(bytePtr);
+					DWORD asciiCount = swap32(descTagStruct->AsciiLength);
+					wchar_t * wideString;
+					if (AnsiToUnicode(descTagStruct->Text, wideString)) {
+						size_t trueStringLength = StringLength(wideString);
+						if ( asciiCount != (1 + trueStringLength) ) {
+							outputText = L":  Validation error: ASCII length incorrect";
+						}
+						outputText += L":  \"";
+						outputText += wideString;
+						outputText += L"\"";
+						free(wideString);
+						haveText = true;
+					}
+				}
+				free(bytePtr);
+			}
+			break;
+
+		case 'XYZ ':
+			if ( 20 == tagEntry->Size ) {
+				CIEXYZ cie;
+				if (ReadProfileBytes(tagEntry->Offset + 8, sizeof(cie), reinterpret_cast<BYTE *>(&cie))) {
+					StringCbPrintf(
+							buf,
+							sizeof(buf),
+							L":  X=%6.4f, Y=%6.4f, Z=%6.4f",
+							double(swap32(cie.ciexyzX)) / double(65536),
+							double(swap32(cie.ciexyzY)) / double(65536),
+							double(swap32(cie.ciexyzZ)) / double(65536) );
+					outputText = buf;
+					haveText = true;
+				}
+			} else {
+				haveText = ShowTagTypeDescription(tagEntry, outputText);
+			}
+			break;
+
+		// Multi-localized Unicode text.  There may be several potential Unicode strings in this tag, and our
+		// job is to pick the "best" one.  The spec asks that we first try for the current language and country
+		// combination and if that fails then try to match just the language.  If that also fails, just use
+		// the first string, assuming that we haven't got some better way of picking one (user preference for
+		// something other than their current locale ID?).  It's a lot of code just to find a string ...
+		//
+		case 'mluc':
+			mlucType * mlucTagStruct;
+			mlucEntryType * mlucEntryPtr;
+			byteCount = tagEntry->Size + sizeof(wchar_t);
+			bytePtr = reinterpret_cast<BYTE *>(malloc(byteCount));
+			if (bytePtr) {
+				if (ReadProfileBytes(tagEntry->Offset, tagEntry->Size, bytePtr)) {
+					mlucTagStruct = reinterpret_cast<mlucType *>(bytePtr);
+
+					DWORD defaultLocaleID;
+					char charBuffer[128];
+
+					// Fetch an ISO639 + ISO3166 four character ID for the current user locale.  This should be
+					// 'enUS' for English (United States) for example, but it will be whatever is set up on the user's
+					// machine at the moment.  We'll prefer this translation if it exists in the 'mluc' tag.
+					//
+					GetLocaleInfoA(LOCALE_USER_DEFAULT, LOCALE_SISO639LANGNAME, charBuffer, _countof(charBuffer));
+					*reinterpret_cast<unsigned short *>(&defaultLocaleID) = *reinterpret_cast<unsigned short *>(charBuffer);
+					GetLocaleInfoA(LOCALE_USER_DEFAULT, LOCALE_SISO3166CTRYNAME, charBuffer, _countof(charBuffer));
+					*(1 + reinterpret_cast<unsigned short *>(&defaultLocaleID)) = *reinterpret_cast<unsigned short *>(charBuffer);
+
+					// Walk through the list (probably just one entry, but we'll try anyway) and see if we can find
+					// our current language and country in the table
+					//
+					size_t entryCount = swap32(mlucTagStruct->EntryCount);
+					size_t entrySize = swap32(mlucTagStruct->EntrySize);
+					mlucEntryPtr = &mlucTagStruct->Entries[0];
+					bool foundIt = false;
+					for (size_t i = 0; i < entryCount; ++i ) {
+
+						// See if our exact language and country has a translation available
+						//
+						if ( defaultLocaleID == mlucEntryPtr->LocaleID ) {
+							foundIt = true;
+							break;
+						}
+
+						// The ICC 4.2.0.0 spec (ICC.1:2004-10, paragraph 10.13) asks that we allow for future growth
+						// in the per-language entries by using the "size" parameter to skip from entry to entry.  This
+						// makes for ugly C++ code, but whatever ...
+						//
+						mlucEntryPtr = reinterpret_cast<mlucEntryType *>(entrySize + reinterpret_cast<BYTE *>(mlucEntryPtr));
+					}
+
+					// If we didn't find the language & country we wanted, try again looking at just the language
+					//
+					if ( false == foundIt ) {
+						mlucEntryPtr = &mlucTagStruct->Entries[0];
+						defaultLocaleID &= 0x0000FFFF;
+						for (size_t i = 0; i < entryCount; ++i ) {
+
+							// See if our language (ignoring country) has a translation available
+							//
+							if ( defaultLocaleID == (mlucEntryPtr->LocaleID & 0x0000FFFF) ) {
+								foundIt = true;
+								break;
+							}
+
+							// The ICC 4.2.0.0 spec (ICC.1:2004-10, paragraph 10.13) asks that we allow for future growth
+							// in the per-language entries by using the "size" parameter to skip from entry to entry.  This
+							// makes for ugly C++ code, but whatever ...
+							//
+							mlucEntryPtr = reinterpret_cast<mlucEntryType *>(entrySize + reinterpret_cast<BYTE *>(mlucEntryPtr));
+						}
+					}
+
+					// If we didn't find the language & country, or just language, we wanted, just use the first one
+					//
+					if ( false == foundIt ) {
+						mlucEntryPtr = &mlucTagStruct->Entries[0];
+					}
+
+					size_t stringOffset = swap32(mlucEntryPtr->Offset);
+					size_t stringSizeInCharacters = swap32(mlucEntryPtr->LengthInBytes) / sizeof(wchar_t);
+					wchar_t * wideString;
+					if (ByteSwapUnicode(reinterpret_cast<wchar_t *>(bytePtr + stringOffset), wideString, stringSizeInCharacters)) {
+						outputText += L":  \"";
+						outputText += wideString;
+						outputText += L"\"";
+						free(wideString);
+						haveText = true;
+					}
+				}
+				free(bytePtr);
+			}
+			break;
+
+		default:
+			haveText = ShowTagTypeDescription(tagEntry, outputText);
+			break;
+
+	}
+	return haveText;
 }
 
 // Return a string for the per-monitor panel
@@ -1381,6 +1733,7 @@ wstring Profile::LoadFullProfile(bool forceReload) {
 wstring Profile::DetailsString(void) {
 
 	wstring s;
+	wstring moreText;
 	wchar_t displayChars[5];
 
 	// Quit early if no profile
@@ -1565,16 +1918,23 @@ wstring Profile::DetailsString(void) {
 	s += L"  Profile Creator:  ";
 	ConvertFourBytesForDisplay(ProfileHeader->phCreator, displayChars, sizeof(displayChars));
 	s += displayChars;
-	DWORD * pProfileID = reinterpret_cast<DWORD *>(&ProfileHeader->phCreator);
-	StringCbPrintf(
-			buf,
-			sizeof(buf),
-			L"\r\n  Profile ID:  %08x %08x %08x %08x\r\n",
-			swap32(pProfileID[1]),
-			swap32(pProfileID[2]),
-			swap32(pProfileID[3]),
-			swap32(pProfileID[4]) );
-	s += buf;
+
+	// Profile ID was introduced with version 4.0, so don't display it for lower versions
+	//
+	if (*reinterpret_cast<BYTE *>(&ProfileHeader->phVersion) >= 4) {
+		DWORD * pProfileID = reinterpret_cast<DWORD *>(&ProfileHeader->phCreator);
+		StringCbPrintf(
+				buf,
+				sizeof(buf),
+				L"\r\n  Profile ID:  %08x %08x %08x %08x\r\n",
+				swap32(pProfileID[1]),
+				swap32(pProfileID[2]),
+				swap32(pProfileID[3]),
+				swap32(pProfileID[4]) );
+		s += buf;
+	} else {
+		s += L"\r\n";
+	}
 
 #if 0
 	StringCbPrintf(buf, sizeof(buf), L"\r\nProfile header (%d bytes):\r\n", sizeof(PROFILEHEADER));
@@ -1582,14 +1942,39 @@ wstring Profile::DetailsString(void) {
 	s += HexDump(reinterpret_cast<unsigned char *>(ProfileHeader), sizeof(PROFILEHEADER), 16);
 #endif
 
+	// Display the tag table's list of tags, and the data for some tags
+	//
 	StringCbPrintf(buf, sizeof(buf), L"\r\nProfile contains %d tags:\r\n", TagCount);
 	s += buf;
+	bool additionalText;
 	for (size_t i = 0; i < TagCount; ++i) {
 		DWORD tagSignature = *sortedTags[i];
 		ConvertFourBytesForDisplay(swap32(tagSignature), displayChars, sizeof(displayChars));
 		lookupString = LookupName( knownTags, _countof(knownTags), tagSignature );
-		StringCbPrintf(buf, sizeof(buf), L"  %s:  %s\r\n", displayChars, lookupString);
+		if (*reinterpret_cast<BYTE *>(&ProfileHeader->phVersion) < 4) {
+
+			// See if there is an older name for this tag in the pre-version 4.0 spec
+			//
+			const wchar_t * lookupString2 = LookupName( knownTagsOldNames, _countof(knownTagsOldNames), tagSignature );
+			if (*lookupString2) {
+				lookupString = lookupString2;
+			}
+		}
+		StringCbPrintf(buf, sizeof(buf), L"  %s:  %s", displayChars, lookupString);
 		s += buf;
+
+		// GretagMacbeth/X-Rite likes to use the 'text' type for some of their private tags, so don't
+		// fill the screen with stuff that isn't useful ... only display 'text' for 'cprt' (copyright)
+		//
+		if ( ('text' == reinterpret_cast<TAG_TABLE_ENTRY *>(sortedTags[i])->Type) && ('cprt' != tagSignature) ) {
+			additionalText = ShowTagTypeDescription(reinterpret_cast<TAG_TABLE_ENTRY *>(sortedTags[i]), moreText);
+		} else {
+			additionalText = ShowShortTagContents(reinterpret_cast<TAG_TABLE_ENTRY *>(sortedTags[i]), moreText);
+		}
+		if (additionalText) {
+			s += moreText;
+		}
+		s += L"\r\n";
 	}
 
 	if (-1 == vcgtIndex) {
@@ -1641,6 +2026,7 @@ wstring Profile::DetailsString(void) {
 #endif
 	}
 
+#if DISPLAY_EMBEDDED_WCS_PROFILE_IN_SHOW_DETAILS
 	if (-1 != wcsProfileIndex) {
 		s += L"\r\nProfile includes an embedded WCS profile ('MS00'):\r\n";
 
@@ -1664,6 +2050,8 @@ wstring Profile::DetailsString(void) {
 			s += WCS_GamutMapModel;
 		}
 	}
+#endif
+
 	return s;
 }
 

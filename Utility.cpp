@@ -232,3 +232,80 @@ HFONT GetFont(HDC hdc, FONT_CLASS fontClass, bool newCopy) {
 		return hFont;
 	}
 }
+
+// Convert an ANSI string to Unicode.  We allocate the Unicode buffer with malloc(), caller
+// must free it with free();
+//
+bool AnsiToUnicode(char * AnsiText, wchar_t * & RefUnicodeText, DWORD codePage) {
+
+	bool success = false;
+
+	// Call MultiByteToWideChar() to get the required size of the output buffer
+	//
+	int wideStringChars = MultiByteToWideChar(
+			codePage,							// Code page
+			0,									// Flags
+			AnsiText,							// Input string
+			-1,									// Count, -1 for NUL-terminated
+			NULL,								// No output buffer
+			0									// Zero output buffer size means "compute required size"
+	);
+	if (wideStringChars) {
+
+		// Call MultiByteToWideChar() a second time to translate the string to Unicode
+		//
+		RefUnicodeText = reinterpret_cast<wchar_t *>(malloc(sizeof(wchar_t) * wideStringChars));
+		if (RefUnicodeText) {
+			int iRetVal = MultiByteToWideChar(
+					codePage,						// Code page
+					0,								// Flags
+					AnsiText,						// Input string
+					-1,								// Count, -1 for NUL-terminated
+					RefUnicodeText,					// Unicode output buffer
+					wideStringChars					// Buffer size in wide characters
+			);
+			if (iRetVal) {
+				success = true;
+			} else {
+				free(RefUnicodeText);
+			}
+		}
+	}
+	return success;
+}
+
+// Convert a big-endian Unicode string to x86-style little-endian Unicode (what Windows likes)
+// The caller must pass us a NUL-terminated BE Unicode string, and must free the buffer we
+// allocate on his behalf.  We use malloc(), he should use free().
+//
+bool ByteSwapUnicode(wchar_t * InputUnicodeText, wchar_t * & RefOutputUnicodeText, size_t InputLengthInCharacters) {
+	bool success = false;
+	wchar_t * inputPtr;
+	size_t characterCount;
+	
+	// Use the provided input length unless it's the default value of -1
+	//
+	if ( -1 == InputLengthInCharacters ) {
+		inputPtr = InputUnicodeText;
+		while (*inputPtr) {
+			++inputPtr;
+		}
+		characterCount = inputPtr - InputUnicodeText;
+	} else {
+		characterCount = InputLengthInCharacters;
+	}
+
+	RefOutputUnicodeText = reinterpret_cast<wchar_t *>(malloc(sizeof(wchar_t) * (1 + characterCount)));
+	if (RefOutputUnicodeText) {
+		inputPtr = InputUnicodeText;
+		wchar_t * outputPtr = RefOutputUnicodeText;
+		for (size_t i = 0; i < characterCount; ++i) {
+			*outputPtr = swap16(*inputPtr);
+			++inputPtr;
+			++outputPtr;
+		}
+		*outputPtr = 0;
+		success = true;
+	}
+	return success;
+}

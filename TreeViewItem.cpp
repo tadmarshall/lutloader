@@ -76,6 +76,15 @@ void TreeViewItem::Handle_TVN_SELCHANGEDW(MonitorPage * monitorPage, NMTREEVIEWW
 		case TREEVIEW_ITEM_TYPE_SYSTEM_PROFILE:
 			s += ProfilePtr->DetailsString();
 			break;
+
+		case TREEVIEW_ITEM_TYPE_OTHER_PROFILES:
+			s += L"TREEVIEW_ITEM_TYPE_OTHER_PROFILES";
+			break;
+
+		case TREEVIEW_ITEM_TYPE_OTHER_PROFILE:
+			s += L"TREEVIEW_ITEM_TYPE_OTHER_PROFILE";
+			break;
+
 	}
 	monitorPage->SetEditControlText(s);
 }
@@ -105,6 +114,13 @@ void TreeViewItem::Handle_WM_CONTEXTMENU(MonitorPage * monitorPage, POINT * scre
 		case TREEVIEW_ITEM_TYPE_SYSTEM_PROFILE:
 			ProfileContextMenu(monitorPage, screenClickPoint, false);
 			break;
+
+		case TREEVIEW_ITEM_TYPE_OTHER_PROFILES:
+			break;
+
+		case TREEVIEW_ITEM_TYPE_OTHER_PROFILE:
+			break;
+
 	}
 }
 
