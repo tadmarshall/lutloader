@@ -499,10 +499,6 @@
 				>
 			</File>
 			<File
-				RelativePath=".\Blank document2.bmp"
-				>
-			</File>
-			<File
 				RelativePath=".\DeclareDPIAware.manifest"
 				>
 			</File>
@@ -515,15 +511,23 @@
 				>
 			</File>
 			<File
-				RelativePath=".\Monitor bitmap from setupapi-dll.bmp"
-				>
-			</File>
-			<File
 				RelativePath=".\setupapi_35.ico"
 				>
 			</File>
 			<File
-				RelativePath=".\Several documents.bmp"
+				RelativePath=".\VCGToverlay16x16.bmp"
+				>
+			</File>
+			<File
+				RelativePath=".\VCGToverlay20x20.BMP"
+				>
+			</File>
+			<File
+				RelativePath=".\VCGToverlay24x24.BMP"
+				>
+			</File>
+			<File
+				RelativePath=".\VCGToverlay32x32.BMP"
 				>
 			</File>
 		</Filter>

@@ -13,7 +13,7 @@
 #include "Utility.h"
 #include "resource.h"
 #include <strsafe.h>
-#include <banned.h>
+//#include <banned.h>
 
 #pragma comment(lib, "comctl32.lib")				// For PropertySheet
 #pragma comment(lib, "mscms.lib")					// For GetColorDirectory

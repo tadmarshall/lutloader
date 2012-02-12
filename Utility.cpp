@@ -5,7 +5,7 @@
 #include "stdafx.h"
 #include "Utility.h"
 #include <strsafe.h>
-#include <banned.h>
+//#include <banned.h>
 
 // Display data as a hex & ANSI dump
 //

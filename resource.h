@@ -7,9 +7,10 @@
 #define IDS_PROPSHEET_FAILURE           103
 #define IDS_ERROR                       104
 #define IDS_EXCEPTION                   105
-#define IDB_BITMAP1                     106
-#define IDB_BITMAP2                     107
-#define IDB_BITMAP3                     108
+#define IDB_VCGT_OVERLAY_16X16          106
+#define IDB_VCGT_OVERLAY_20X20          107
+#define IDB_VCGT_OVERLAY_24X24          108
+#define IDB_VCGT_OVERLAY_32X32          109
 #define IDR_LUTVIEW_POPUP_MENU          199
 #define IDD_SUMMARY_PAGE_XP             200
 #define IDD_SUMMARY_PAGE_VISTA          201
@@ -36,7 +37,7 @@
 #ifdef APSTUDIO_INVOKED
 #ifndef APSTUDIO_READONLY_SYMBOLS
 #define _APS_NO_MFC                     1
-#define _APS_NEXT_RESOURCE_VALUE        109
+#define _APS_NEXT_RESOURCE_VALUE        110
 #define _APS_NEXT_COMMAND_VALUE         40006
 #define _APS_NEXT_CONTROL_VALUE         1010
 #define _APS_NEXT_SYMED_VALUE           101

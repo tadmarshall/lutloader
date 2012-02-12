@@ -50,6 +50,7 @@ private:
 	PROFILEHEADER *		ProfileHeader;					// Header (128 bytes)
 	DWORD				TagCount;						// Count of tags in profile
 	TAG_TABLE_ENTRY *	TagTable;						// Table of tags
+	DWORD * *			sortedTags;						// Index into tags table in a sorted order
 	int					vcgtIndex;						// Location of VCGT tag in TagTable, or -1
 	VCGT_HEADER *		pVCGT;							// Video Card Gamma Tag structure as on disk
 	VCGT_HEADER			vcgtHeader;						// A byte-swapped version for us to use

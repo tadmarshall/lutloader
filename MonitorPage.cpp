@@ -11,7 +11,18 @@
 #include "Utility.h"
 #include "resource.h"
 #include <strsafe.h>
-#include <banned.h>
+//#include <banned.h>
+
+// Constants
+//
+#define MINIMUM_TREEVIEW_WIDTH	120					// Minimum TreeView control width for splitter (DPI scaled)
+#define MINIMUM_EDIT_WIDTH		120					// Minimum Edit control width for splitter (DPI scaled)
+
+#define IMAGE_MONITOR			0					// Indexes to images in TreeView's ImageList
+#define IMAGE_PROFILES			1
+#define IMAGE_ICC_PROFILE		2
+
+#define SHELL32_FOLDER_ICON		5					// The icon we use for folders from shell32.dll
 
 // Global externs defined in this file
 //
@@ -22,10 +33,11 @@ extern WNDPROC oldEditWindowProc = 0;				// The original Edit control's window p
 extern HINSTANCE g_hInst;							// Instance handle
 extern double dpiScale;								// Scaling factor for dots per inch (actual versus standard 96 DPI)
 
-// Constants
+// Global static symbols internal to this file
 //
-#define MINIMUM_TREEVIEW_WIDTH 120					// Minimum TreeView control width for splitter (DPI scaled)
-#define MINIMUM_EDIT_WIDTH 120						// Minimum Edit control width for splitter (DPI scaled)
+static HIMAGELIST hImageList = 0;
+static int imageWCSprofile = IMAGE_ICC_PROFILE;
+static int overlayImage= 0;;
 
 // Constructor
 //
@@ -267,6 +279,145 @@ void MonitorPage::Reset(void) {
 	}
 }
 
+// Create an ImageList for the TreeView
+//
+void CreateImageList(void) {
+	HBITMAP hBitmap;
+	HICON hIcon;
+	HKEY hKey;
+	wchar_t registryString[2048];
+	wchar_t expandedString[2048];
+	DWORD dataSize;
+	wchar_t * ptr;
+	wchar_t * comma;
+	int index;
+	int nRead;
+	HMODULE hModule;
+	int iconSize;
+
+	// Adjust icon size for high DPI
+	//
+	iconSize = static_cast<int>(0.49 + (16 * dpiScale));
+	hImageList = ImageList_Create(iconSize, iconSize, ILC_COLOR32 | ILC_MASK, 5, 1);
+	if (hImageList) {
+
+		// Index 0 -- IMAGE_MONITOR -- Monitor
+		//
+		hIcon = reinterpret_cast<HICON>(LoadImage(g_hInst, MAKEINTRESOURCE(IDI_ICON_SETUPAPI_35), IMAGE_ICON, iconSize, iconSize, LR_CREATEDIBSECTION));
+		ImageList_ReplaceIcon(hImageList, -1, hIcon);
+		DeleteObject(hIcon);
+
+		// Index 1 -- IMAGE_PROFILES -- any subtree of profiles (User profiles, System profiles, Profiles)
+		//
+		StringCbCopy(registryString, sizeof(registryString), L"%SystemRoot%\\System32\\shell32.dll");
+		SecureZeroMemory(expandedString, sizeof(expandedString));
+		ExpandEnvironmentStrings(registryString, expandedString, _countof(expandedString));
+		hModule = LoadLibraryEx(expandedString, NULL, LOAD_LIBRARY_AS_IMAGE_RESOURCE);
+		if (hModule) {
+			hIcon = reinterpret_cast<HICON>(LoadImage(hModule, MAKEINTRESOURCE(SHELL32_FOLDER_ICON), IMAGE_ICON, iconSize, iconSize, LR_CREATEDIBSECTION));
+			ImageList_ReplaceIcon(hImageList, -1, hIcon);
+			DeleteObject(hIcon);
+			FreeLibrary(hModule);
+		}
+
+		// Index 2 -- IMAGE_ICC_PROFILE -- use the DefaultIcon for .icc and .icm files
+		//
+		if (ERROR_SUCCESS == RegOpenKeyEx(HKEY_CLASSES_ROOT, L"icmfile\\DefaultIcon", 0, KEY_QUERY_VALUE, &hKey)) {
+			dataSize = sizeof(registryString);
+			SecureZeroMemory(registryString, dataSize);
+			if (ERROR_SUCCESS == RegQueryValueEx(hKey, NULL, NULL, NULL, reinterpret_cast<BYTE *>(registryString), &dataSize)) {
+				SecureZeroMemory(expandedString, sizeof(expandedString));
+				ExpandEnvironmentStrings(registryString, expandedString, _countof(expandedString));
+				ptr = expandedString;
+				comma = 0;
+				while ( *ptr ) {
+					if ( L',' == *ptr ) {
+						comma = ptr;
+					}
+					++ptr;
+				}
+				if (comma) {
+					*comma = 0;
+					++comma;
+					nRead = swscanf_s(comma, L"%d", &index);
+					if ( 1 == nRead ) {
+						if ( index < 0 ) {
+							index = -index;
+						} else if ( 0 == index ) {
+							index = 100;		// Hard code XP index, sigh, it has 0 in its registry entry ...
+						}
+						hModule = LoadLibraryEx(expandedString, NULL, LOAD_LIBRARY_AS_IMAGE_RESOURCE);
+						if (hModule) {
+							hIcon = reinterpret_cast<HICON>(LoadImage(hModule, MAKEINTRESOURCE(index), IMAGE_ICON, iconSize, iconSize, LR_CREATEDIBSECTION));
+							ImageList_ReplaceIcon(hImageList, -1, hIcon);
+							DeleteObject(hIcon);
+							FreeLibrary(hModule);
+						}
+					}
+				}
+			}
+			RegCloseKey(hKey);
+		}
+
+		// Index 3, if used -- imageWCSindex -- try to use the DefaultIcon for .cdmp files, otherwise just use the ICC image
+		//
+		if (ERROR_SUCCESS == RegOpenKeyEx(HKEY_CLASSES_ROOT, L"cdmpfile\\DefaultIcon", 0, KEY_QUERY_VALUE, &hKey)) {
+			dataSize = sizeof(registryString);
+			SecureZeroMemory(registryString, dataSize);
+			if (ERROR_SUCCESS == RegQueryValueEx(hKey, NULL, NULL, NULL, reinterpret_cast<BYTE *>(registryString), &dataSize)) {
+				SecureZeroMemory(expandedString, sizeof(expandedString));
+				ExpandEnvironmentStrings(registryString, expandedString, _countof(expandedString));
+				ptr = expandedString;
+				comma = 0;
+				while ( *ptr ) {
+					if ( L',' == *ptr ) {
+						comma = ptr;
+					}
+					++ptr;
+				}
+				if (comma) {
+					*comma = 0;
+					++comma;
+					nRead = swscanf_s(comma, L"%d", &index);
+					if ( 1 == nRead ) {
+						if ( index < 0 ) {
+							index = -index;
+						}
+						hModule = LoadLibraryEx(expandedString, NULL, LOAD_LIBRARY_AS_IMAGE_RESOURCE);
+						if (hModule) {
+							hIcon = reinterpret_cast<HICON>(LoadImage(hModule, MAKEINTRESOURCE(index), IMAGE_ICON, iconSize, iconSize, LR_CREATEDIBSECTION));
+							imageWCSprofile = ImageList_ReplaceIcon(hImageList, -1, hIcon);
+							DeleteObject(hIcon);
+							FreeLibrary(hModule);
+						}
+					}
+				}
+			}
+			RegCloseKey(hKey);
+		}
+
+		// Image 3 or 4 (depending on if XP) -- overlay for profile indicating that it has a VCGT
+		//
+		int resourceID;									// Select overlay image based on DPI setting
+		if (iconSize <= 16) {
+			resourceID = IDB_VCGT_OVERLAY_16X16;
+		} else if (iconSize <= 20) {
+			resourceID = IDB_VCGT_OVERLAY_20X20;
+		} else if (iconSize <= 24) {
+			resourceID = IDB_VCGT_OVERLAY_24X24;
+		} else {
+			resourceID = IDB_VCGT_OVERLAY_32X32;
+		}
+		HBITMAP hBitmap2;		// We need to use two icon handles, otherwise ImageList_SetOverlayImage() draws a black image (the mask)
+		hBitmap  = reinterpret_cast<HBITMAP>(LoadImage(g_hInst, MAKEINTRESOURCE(resourceID), IMAGE_BITMAP, iconSize, iconSize, LR_CREATEDIBSECTION));
+		hBitmap2 = reinterpret_cast<HBITMAP>(LoadImage(g_hInst, MAKEINTRESOURCE(resourceID), IMAGE_BITMAP, iconSize, iconSize, LR_CREATEDIBSECTION));
+		overlayImage = ImageList_Add(hImageList, hBitmap, hBitmap2);
+		DeleteObject(hBitmap);
+		DeleteObject(hBitmap2);
+		ImageList_SetOverlayImage(hImageList, overlayImage, 1);
+	}
+}
+
 // Build the TreeView
 //
 void MonitorPage::BuildTreeView(void) {
@@ -277,31 +428,10 @@ void MonitorPage::BuildTreeView(void) {
 	wchar_t buf[1024];
 	TreeViewItem * tiObject = 0;
 
-#if 0
-	HIMAGELIST hImageList;
-	HBITMAP hBitmap;
-	hImageList = ImageList_Create(16, 16, ILC_COLOR24 | ILC_MASK, 3, 1);
-	//hImageList = ImageList_Create(16, 16, ILC_COLOR24, 1, 1);
-	if (hImageList) {
-
-		hBitmap = reinterpret_cast<HBITMAP>(LoadImage(g_hInst, MAKEINTRESOURCE(IDB_BITMAP1), IMAGE_BITMAP, 16, 16, LR_CREATEDIBSECTION));
-		ImageList_AddMasked(hImageList, hBitmap, 0);
-		DeleteObject(hBitmap);
-
-		//HMODULE hShell32 = LoadLibrary(L"shell32.dll");
-		//hBitmap = reinterpret_cast<HBITMAP>(LoadImage(hShell32, MAKEINTRESOURCE(243), IMAGE_ICON, 16, 16, LR_CREATEDIBSECTION));
-		hBitmap = reinterpret_cast<HBITMAP>(LoadImage(g_hInst, MAKEINTRESOURCE(IDB_BITMAP2), IMAGE_BITMAP, 16, 16, LR_CREATEDIBSECTION));
-		ImageList_AddMasked(hImageList, hBitmap, 0);
-		DeleteObject(hBitmap);
-
-		hBitmap = reinterpret_cast<HBITMAP>(LoadImage(g_hInst, MAKEINTRESOURCE(IDB_BITMAP3), IMAGE_BITMAP, 16, 16, LR_CREATEDIBSECTION));
-		ImageList_AddMasked(hImageList, hBitmap, 0);
-		DeleteObject(hBitmap);
-
-		//ImageList_Add(hImageList, hBitmap, 0);
-		SendMessage(hwndTreeView, TVM_SETIMAGELIST, TVSIL_NORMAL, reinterpret_cast<LPARAM>(hImageList));
+	if ( !hImageList ) {
+		CreateImageList();
 	}
-#endif
+	SendMessage(hwndTreeView, TVM_SETIMAGELIST, TVSIL_NORMAL, reinterpret_cast<LPARAM>(hImageList));
 
 #if 1
 	// For Vista and later, turn on double-buffering (offscreen bitmap drawing)
@@ -317,18 +447,14 @@ void MonitorPage::BuildTreeView(void) {
 	TVINSERTSTRUCT tvInsertStruct;
 	SecureZeroMemory(&tvInsertStruct, sizeof(tvInsertStruct));
 	tvInsertStruct.hInsertAfter = TVI_ROOT;
-	//tvInsertStruct.itemex.mask = TVIF_TEXT | TVIF_PARAM | TVIF_IMAGE | TVIF_SELECTEDIMAGE;
-	//tvInsertStruct.itemex.iImage = 0;
-	//tvInsertStruct.itemex.iSelectedImage = 0;
-	tvInsertStruct.itemex.mask = TVIF_TEXT | TVIF_PARAM;
-	tvInsertStruct.itemex.state = TVIS_BOLD;
-	tvInsertStruct.itemex.stateMask = TVIS_BOLD;
+	tvInsertStruct.itemex.mask = TVIF_TEXT | TVIF_PARAM | TVIF_IMAGE | TVIF_SELECTEDIMAGE;
+	tvInsertStruct.itemex.iImage = IMAGE_MONITOR;
+	tvInsertStruct.itemex.iSelectedImage = IMAGE_MONITOR;
 	StringCbCopy(buf, sizeof(buf), monitor->GetDeviceString().c_str());
 	tvInsertStruct.itemex.pszText = buf;
 	tiObject = AddTreeViewItem(new TreeViewItem(TREEVIEW_ITEM_TYPE_MONITOR));
 	tvInsertStruct.itemex.lParam = reinterpret_cast<LPARAM>(tiObject);
 	tvRoot = reinterpret_cast<HTREEITEM>( SendMessage(hwndTreeView, TVM_INSERTITEM, 0, reinterpret_cast<LPARAM>(&tvInsertStruct)) );
-	//tvInsertStruct.itemex.mask = TVIF_TEXT | TVIF_PARAM;
 	tiObject->SetHTREEITEM(tvRoot);
 	tiObject->SetMonitor(monitor);
 
@@ -340,28 +466,46 @@ void MonitorPage::BuildTreeView(void) {
 		tvInsertStruct.hParent = tvRoot;
 		tvInsertStruct.hInsertAfter = TVI_LAST;
 		if (hiliteUser) {
-			//tvInsertStruct.itemex.mask = TVIF_TEXT | TVIF_PARAM | TVIF_STATE | TVIF_IMAGE | TVIF_SELECTEDIMAGE;
-			tvInsertStruct.itemex.mask = TVIF_TEXT | TVIF_PARAM | TVIF_STATE;
+			tvInsertStruct.itemex.mask = TVIF_TEXT | TVIF_PARAM | TVIF_STATE | TVIF_IMAGE | TVIF_SELECTEDIMAGE;
+			tvInsertStruct.itemex.state = TVIS_BOLD;
+			tvInsertStruct.itemex.stateMask = TVIS_BOLD;
+		} else {
+			tvInsertStruct.itemex.mask = TVIF_TEXT | TVIF_PARAM | TVIF_IMAGE | TVIF_SELECTEDIMAGE;
+			tvInsertStruct.itemex.state = 0;
+			tvInsertStruct.itemex.stateMask = 0;
 		}
-		tvInsertStruct.itemex.iImage = 1;
-		tvInsertStruct.itemex.iSelectedImage = 1;
+		tvInsertStruct.itemex.iImage = IMAGE_PROFILES;
+		tvInsertStruct.itemex.iSelectedImage = IMAGE_PROFILES;
 		tvInsertStruct.itemex.pszText = L"User profiles";
 		tiObject = AddTreeViewItem(new TreeViewItem(TREEVIEW_ITEM_TYPE_USER_PROFILES));
 		tvInsertStruct.itemex.lParam = reinterpret_cast<LPARAM>(tiObject);
 		tvUserProfiles = reinterpret_cast<HTREEITEM>( SendMessage(hwndTreeView, TVM_INSERTITEM, 0, reinterpret_cast<LPARAM>(&tvInsertStruct)) );
 		tiObject->SetHTREEITEM(tvUserProfiles);
-		//tvInsertStruct.itemex.mask = TVIF_TEXT | TVIF_PARAM | TVIF_IMAGE | TVIF_SELECTEDIMAGE;
-		tvInsertStruct.itemex.mask = TVIF_TEXT | TVIF_PARAM;
-		tvInsertStruct.itemex.iImage = 2;
-		tvInsertStruct.itemex.iSelectedImage = 2;
+		tvInsertStruct.hParent = tvUserProfiles;
 
 		profileList = monitor->GetProfileList(true);
 		count = profileList.size();
-		tvInsertStruct.hParent = tvUserProfiles;
 		for (size_t i = 0; i < count; ++i) {
+			 profileList[i]->LoadFullProfile(false);
+ 			 if (profileList[i]->HasEmbeddedWcsProfile()) {
+				tvInsertStruct.itemex.iImage = imageWCSprofile;
+			 } else {
+				tvInsertStruct.itemex.iImage = IMAGE_ICC_PROFILE;
+			 }
+			 if (profileList[i]->GetLutPointer()) {
+				tvInsertStruct.itemex.mask = TVIF_TEXT | TVIF_PARAM | TVIF_STATE | TVIF_IMAGE | TVIF_SELECTEDIMAGE;
+				tvInsertStruct.itemex.state = INDEXTOOVERLAYMASK(1);
+				tvInsertStruct.itemex.stateMask = TVIS_OVERLAYMASK;
+			 } else {
+				tvInsertStruct.itemex.mask = TVIF_TEXT | TVIF_PARAM | TVIF_IMAGE | TVIF_SELECTEDIMAGE;
+				tvInsertStruct.itemex.state = 0;
+				tvInsertStruct.itemex.stateMask = 0;
+			 }
+			tvInsertStruct.itemex.iSelectedImage = tvInsertStruct.itemex.iImage;
 			if ( profileList[i] == monitor->GetUserProfile() ) {
-				//tvInsertStruct.itemex.mask = TVIF_TEXT | TVIF_PARAM | TVIF_STATE | TVIF_IMAGE | TVIF_SELECTEDIMAGE;
-				tvInsertStruct.itemex.mask = TVIF_TEXT | TVIF_PARAM | TVIF_STATE;
+				tvInsertStruct.itemex.mask = TVIF_TEXT | TVIF_PARAM | TVIF_STATE | TVIF_IMAGE | TVIF_SELECTEDIMAGE;
+				tvInsertStruct.itemex.state |= TVIS_BOLD;
+				tvInsertStruct.itemex.stateMask |= TVIS_BOLD;
 			}
 			StringCbCopy(buf, sizeof(buf), profileList[i]->GetName().c_str());
 			tvInsertStruct.itemex.pszText = buf;
@@ -370,69 +514,76 @@ void MonitorPage::BuildTreeView(void) {
 			tvItem = reinterpret_cast<HTREEITEM>( SendMessage(hwndTreeView, TVM_INSERTITEM, 0, reinterpret_cast<LPARAM>(&tvInsertStruct)) );
 			tiObject->SetHTREEITEM(tvItem);
 			tiObject->SetProfile(profileList[i]);
-			//tvInsertStruct.itemex.mask = TVIF_TEXT | TVIF_PARAM | TVIF_IMAGE | TVIF_SELECTEDIMAGE;
-			tvInsertStruct.itemex.mask = TVIF_TEXT | TVIF_PARAM;
 		}
 		SendMessage(hwndTreeView, TVM_SORTCHILDREN, FALSE, reinterpret_cast<LPARAM>(tvUserProfiles));
 
-		tvInsertStruct.hParent = tvRoot;
 		if (!hiliteUser) {
-			tvInsertStruct.itemex.mask = TVIF_TEXT | TVIF_PARAM | TVIF_STATE;
+			tvInsertStruct.itemex.mask = TVIF_TEXT | TVIF_PARAM | TVIF_STATE | TVIF_IMAGE | TVIF_SELECTEDIMAGE;
+			tvInsertStruct.itemex.state = TVIS_BOLD;
+			tvInsertStruct.itemex.stateMask = TVIS_BOLD;
+		} else {
+			tvInsertStruct.itemex.mask = TVIF_TEXT | TVIF_PARAM | TVIF_IMAGE | TVIF_SELECTEDIMAGE;
+			tvInsertStruct.itemex.state = 0;
+			tvInsertStruct.itemex.stateMask = 0;
 		}
 		tvInsertStruct.itemex.pszText = L"System profiles";
 		tiObject = AddTreeViewItem(new TreeViewItem(TREEVIEW_ITEM_TYPE_SYSTEM_PROFILES));
-		tvInsertStruct.itemex.lParam = reinterpret_cast<LPARAM>(tiObject);
-		tvSystemProfiles = reinterpret_cast<HTREEITEM>( SendMessage(hwndTreeView, TVM_INSERTITEM, 0, reinterpret_cast<LPARAM>(&tvInsertStruct)) );
-		tiObject->SetHTREEITEM(tvSystemProfiles);
-		tvInsertStruct.itemex.mask = TVIF_TEXT | TVIF_PARAM;
 
-		profileList = monitor->GetProfileList(false);
-		count = profileList.size();
-		tvInsertStruct.hParent = tvSystemProfiles;
-		for (size_t i = 0; i < count; ++i) {
-			if ( profileList[i] == monitor->GetSystemProfile() ) {
-				tvInsertStruct.itemex.mask = TVIF_TEXT | TVIF_PARAM | TVIF_STATE;
-			}
-			StringCbCopy(buf, sizeof(buf), profileList[i]->GetName().c_str());
-			tvInsertStruct.itemex.pszText = buf;
-			tiObject = AddTreeViewItem(new TreeViewItem(TREEVIEW_ITEM_TYPE_SYSTEM_PROFILE));
-			tvInsertStruct.itemex.lParam = reinterpret_cast<LPARAM>(tiObject);
-			tvItem = reinterpret_cast<HTREEITEM>( SendMessage(hwndTreeView, TVM_INSERTITEM, 0, reinterpret_cast<LPARAM>(&tvInsertStruct)) );
-			tiObject->SetHTREEITEM(tvItem);
-			tiObject->SetProfile(profileList[i]);
-			tvInsertStruct.itemex.mask = TVIF_TEXT | TVIF_PARAM;
-		}
-		SendMessage(hwndTreeView, TVM_SORTCHILDREN, FALSE, reinterpret_cast<LPARAM>(tvSystemProfiles));
+		// Code merges with Windows XP code below (Vista "System profiles" is the same as XP "Profiles")
+		//
 
 	} else {
 
 		// Windows XP gets a single profile subtree, just called "Profiles"
 		//
-		tvInsertStruct.hParent = tvRoot;
 		tvInsertStruct.itemex.pszText = L"Profiles";
 		tiObject = AddTreeViewItem(new TreeViewItem(TREEVIEW_ITEM_TYPE_PROFILES));
-		tvInsertStruct.itemex.lParam = reinterpret_cast<LPARAM>(tiObject);
-		tvSystemProfiles = reinterpret_cast<HTREEITEM>( SendMessage(hwndTreeView, TVM_INSERTITEM, 0, reinterpret_cast<LPARAM>(&tvInsertStruct)) );
-		tiObject->SetHTREEITEM(tvSystemProfiles);
-
-		profileList = monitor->GetProfileList(false);
-		count = profileList.size();
-		tvInsertStruct.hParent = tvSystemProfiles;
-		for (size_t i = 0; i < count; ++i) {
-			if ( profileList[i] == monitor->GetSystemProfile() ) {
-				tvInsertStruct.itemex.mask = TVIF_TEXT | TVIF_PARAM | TVIF_STATE;
-			}
-			StringCbCopy(buf, sizeof(buf), profileList[i]->GetName().c_str());
-			tvInsertStruct.itemex.pszText = buf;
-			tiObject = AddTreeViewItem(new TreeViewItem(TREEVIEW_ITEM_TYPE_SYSTEM_PROFILE));
-			tvInsertStruct.itemex.lParam = reinterpret_cast<LPARAM>(tiObject);
-			tvItem = reinterpret_cast<HTREEITEM>( SendMessage(hwndTreeView, TVM_INSERTITEM, 0, reinterpret_cast<LPARAM>(&tvInsertStruct)) );
-			tiObject->SetHTREEITEM(tvItem);
-			tiObject->SetProfile(profileList[i]);
-			tvInsertStruct.itemex.mask = TVIF_TEXT | TVIF_PARAM;
-		}
-		SendMessage(hwndTreeView, TVM_SORTCHILDREN, FALSE, reinterpret_cast<LPARAM>(tvSystemProfiles));
 	}
+
+	// Common code for Vista and Windows 7 "System profiles" and XP "Profiles"
+	//
+	tvInsertStruct.hParent = tvRoot;
+	tvInsertStruct.itemex.iImage = IMAGE_PROFILES;
+	tvInsertStruct.itemex.iSelectedImage = IMAGE_PROFILES;
+	tvInsertStruct.itemex.lParam = reinterpret_cast<LPARAM>(tiObject);
+	tvSystemProfiles = reinterpret_cast<HTREEITEM>( SendMessage(hwndTreeView, TVM_INSERTITEM, 0, reinterpret_cast<LPARAM>(&tvInsertStruct)) );
+	tiObject->SetHTREEITEM(tvSystemProfiles);
+	tvInsertStruct.hParent = tvSystemProfiles;
+
+	profileList = monitor->GetProfileList(false);
+	count = profileList.size();
+	for (size_t i = 0; i < count; ++i) {
+		 profileList[i]->LoadFullProfile(false);
+		 if (profileList[i]->HasEmbeddedWcsProfile()) {
+			tvInsertStruct.itemex.iImage = imageWCSprofile;
+		 } else {
+			tvInsertStruct.itemex.iImage = IMAGE_ICC_PROFILE;
+		 }
+		 if (profileList[i]->GetLutPointer()) {
+			tvInsertStruct.itemex.mask = TVIF_TEXT | TVIF_PARAM | TVIF_STATE | TVIF_IMAGE | TVIF_SELECTEDIMAGE;
+			tvInsertStruct.itemex.state = INDEXTOOVERLAYMASK(1);
+			tvInsertStruct.itemex.stateMask = TVIS_OVERLAYMASK;
+		 } else {
+			tvInsertStruct.itemex.mask = TVIF_TEXT | TVIF_PARAM | TVIF_IMAGE | TVIF_SELECTEDIMAGE;
+			tvInsertStruct.itemex.state = 0;
+			tvInsertStruct.itemex.stateMask = 0;
+		 }
+		tvInsertStruct.itemex.iSelectedImage = tvInsertStruct.itemex.iImage;
+		if ( profileList[i] == monitor->GetSystemProfile() ) {
+			tvInsertStruct.itemex.mask = TVIF_TEXT | TVIF_PARAM | TVIF_STATE | TVIF_IMAGE | TVIF_SELECTEDIMAGE;
+			tvInsertStruct.itemex.state |= TVIS_BOLD;
+			tvInsertStruct.itemex.stateMask |= TVIS_BOLD;
+		}
+		StringCbCopy(buf, sizeof(buf), profileList[i]->GetName().c_str());
+		tvInsertStruct.itemex.pszText = buf;
+		tiObject = AddTreeViewItem(new TreeViewItem(TREEVIEW_ITEM_TYPE_SYSTEM_PROFILE));
+		tvInsertStruct.itemex.lParam = reinterpret_cast<LPARAM>(tiObject);
+		tvItem = reinterpret_cast<HTREEITEM>( SendMessage(hwndTreeView, TVM_INSERTITEM, 0, reinterpret_cast<LPARAM>(&tvInsertStruct)) );
+		tiObject->SetHTREEITEM(tvItem);
+		tiObject->SetProfile(profileList[i]);
+	}
+	SendMessage(hwndTreeView, TVM_SORTCHILDREN, FALSE, reinterpret_cast<LPARAM>(tvSystemProfiles));
+
 	if ( !resetting ) {
 		if (requestedRootExpansion) {
 			SendMessage(hwndTreeView, TVM_EXPAND, TVE_EXPAND, reinterpret_cast<LPARAM>(tvRoot));
@@ -489,6 +640,7 @@ INT_PTR CALLBACK MonitorPage::MonitorPageProc(HWND hWnd, UINT uMessage, WPARAM w
 	RECT rect;
 	POINT cp;
 	int xPosNew;
+	HTREEITEM hSelection;
 
 	switch (uMessage) {
 		case WM_INITDIALOG:
@@ -713,6 +865,16 @@ INT_PTR CALLBACK MonitorPage::MonitorPageProc(HWND hWnd, UINT uMessage, WPARAM w
 					//PSHNOTIFY * pPSHNOTIFY;
 					//pPSHNOTIFY = reinterpret_cast<PSHNOTIFY *>(lParam);
 					//MessageBox(NULL, L"PSN_SETACTIVE", L"PropertySheet notification", MB_ICONINFORMATION | MB_OK);
+
+					// If showing the text for the monitor, refresh it in case the Load LUT button has been pressed
+					//
+					if (thisPage->hwndTreeView) {
+						hSelection = reinterpret_cast<HTREEITEM>(
+								SendMessage( thisPage->hwndTreeView, TVM_GETNEXTITEM, TVGN_CARET, 0 ) );
+						if (hSelection && (hSelection == thisPage->tvRoot) ) {
+							thisPage->SetEditControlText(thisPage->monitor->SummaryString());
+						}
+					}
 					break;
 
 				// Leaving page

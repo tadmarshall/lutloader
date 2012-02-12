@@ -187,9 +187,10 @@ IDI_ICON_SETUPAPI_35    ICON                    "setupapi_35.ico"
 // Bitmap
 //
 
-IDB_BITMAP1             BITMAP                  "Monitor bitmap from setupapi-dll.bmp"
-IDB_BITMAP2             BITMAP                  "Several documents.bmp"
-IDB_BITMAP3             BITMAP                  "Blank document2.bmp"
+IDB_VCGT_OVERLAY_16X16  BITMAP                  "VCGToverlay16x16.bmp"
+IDB_VCGT_OVERLAY_20X20  BITMAP                  "VCGToverlay20x20.bmp"
+IDB_VCGT_OVERLAY_24X24  BITMAP                  "VCGToverlay24x24.bmp"
+IDB_VCGT_OVERLAY_32X32  BITMAP                  "VCGToverlay32x32.bmp"
 
 /////////////////////////////////////////////////////////////////////////////
 //

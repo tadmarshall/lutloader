@@ -8,7 +8,7 @@
 #include "resource.h"
 #include "TreeViewItem.h"
 //#include "Utility.h"
-#include <banned.h>
+//#include <banned.h>
 
 // Symbols defined in other files
 //
@@ -237,52 +237,13 @@ void TreeViewItem::ProfileContextMenu(MonitorPage * monitorPage, POINT * screenC
 		bool success = monitor->RemoveProfileAssociation(ProfilePtr, isUser);
 
 		// If we don't have Administrator privileges and we hit the system profile,
-		// then we didn't actually change the setting (we just loaded the LUT)
+		// then we didn't actually remove this association
 		//
 		if (success) {
 
-#if 0
-			// Unbold the currently bold item, make ourselves bold
+			// Delete this node from the TreeView
 			//
-			HTREEITEM hParent = reinterpret_cast<HTREEITEM>(
-					SendMessage(
-							hwndTreeView,
-							TVM_GETNEXTITEM,
-							TVGN_PARENT,
-							reinterpret_cast<LPARAM>(hTreeItem) ) );
-			HTREEITEM hChild = reinterpret_cast<HTREEITEM>(
-					SendMessage(
-							hwndTreeView,
-							TVM_GETNEXTITEM,
-							TVGN_CHILD,
-							reinterpret_cast<LPARAM>(hParent) ) );
-			TVITEMEX itemEx;
-			SecureZeroMemory(&itemEx, sizeof(itemEx));
-			itemEx.mask = TVIF_HANDLE | TVIF_STATE;
-			while (hChild) {
-				if ( hChild != hTreeItem ) {
-					itemEx.hItem = hChild;
-					itemEx.state = TVIS_BOLD;
-					itemEx.stateMask = TVIS_BOLD;
-					SendMessage(hwndTreeView, TVM_GETITEM, 0, reinterpret_cast<LPARAM>(&itemEx));
-					if ( 0 != (itemEx.state & TVIS_BOLD) ) {
-						itemEx.state = 0;
-						itemEx.stateMask = TVIS_BOLD;
-						SendMessage(hwndTreeView, TVM_SETITEM, 0, reinterpret_cast<LPARAM>(&itemEx));
-					}
-				}
-				hChild = reinterpret_cast<HTREEITEM>(
-						SendMessage(
-								hwndTreeView,
-								TVM_GETNEXTITEM,
-								TVGN_NEXT,
-								reinterpret_cast<LPARAM>(hChild) ) );
-			}
-			itemEx.hItem = hTreeItem;
-			itemEx.state = TVIS_BOLD;
-			itemEx.stateMask = TVIS_BOLD;
-			SendMessage(hwndTreeView, TVM_SETITEM, 0, reinterpret_cast<LPARAM>(&itemEx));
-#endif
+			SendMessage(hwndTreeView, TVM_DELETEITEM, 0, reinterpret_cast<LPARAM>(hTreeItem));
 		}
 	}
 	DestroyMenu(hPopup);

@@ -7,7 +7,7 @@
 #include "Profile.h"
 #include "Utility.h"
 #include <strsafe.h>
-#include <banned.h>
+//#include <banned.h>
 
 extern wchar_t * ColorDirectory;
 extern wchar_t * ColorDirectoryErrorString;
@@ -141,6 +141,95 @@ const NAME_LOOKUP renderingIntents[] = {
 	{ INTENT_ABSOLUTE_COLORIMETRIC,		L"ICC-Absolute Colorimetric" }
 };
 
+// List of known tags
+//
+const NAME_LOOKUP knownTags[] = {
+	{ 'A2B0',				L"Device to PCS perceptual transform" },
+	{ 'A2B1',				L"Device to PCS colorimetric transform" },
+	{ 'A2B2',				L"Device to PCS saturation transform" },
+	{ 'B2A0',				L"PCS to device perceptual transform" },
+	{ 'B2A1',				L"PCS to device colorimetric transform" },
+	{ 'B2A2',				L"PCS to device saturation transform" },
+	{ 'B2D0',				L"BToD0" },
+	{ 'B2D1',				L"BToD1" },
+	{ 'B2D2',				L"BToD2" },
+	{ 'B2D3',				L"BToD3" },
+	{ 'bfd ',				L"UcrBg" },
+	{ 'bkpt',				L"Media black point" },
+	{ 'bTRC',				L"Blue tone reproduction curve" },
+	{ 'bXYZ',				L"Blue matrix column" },
+	{ 'calt',				L"Calibration date and time" },
+	{ 'chad',				L"Chromatic adaptation" },
+	{ 'chrm',				L"Chromaticity type" },
+	{ 'CIED',				L"GretagMacbeth private" },
+	{ 'ciis',				L"Colorimetric intent image state" },
+	{ 'clot',				L"Colorant table out" },
+	{ 'clro',				L"Colorant order" },
+	{ 'clrt',				L"Colorant table" },
+	{ 'cprt',				L"Copyright" },
+	{ 'crdi',				L"Crd information" },
+	{ 'CxF ',				L"GretagMacbeth Color Exchange Format" },
+	{ 'D2B0',				L"DToB0" },
+	{ 'D2B1',				L"DToB1" },
+	{ 'D2B2',				L"DToB2" },
+	{ 'D2B3',				L"DToB3" },
+	{ 'data',				L"Data" },
+	{ 'DDPS',				L"GretagMacbeth Display Device Profile Settings" },
+	{ 'desc',				L"Profile description" },
+	{ 'DevD',				L"GretagMacbeth private" },
+	{ 'devs',				L"Device settings" },
+	{ 'dmdd',				L"Device model" },
+	{ 'dmnd',				L"Device manufacturer" },
+	{ 'dscm',				L"Profile description multi-lingual" },
+	{ 'dtim',				L"Date time" },
+	{ 'fpce',				L"Focal plane colorimetry estimates" },
+	{ 'gamt',				L"Gamut" },
+	{ 'gmps',				L"GretagMacbeth private" },
+	{ 'gTRC',				L"Green tone reproduction curve" },
+	{ 'gXYZ',				L"Green matrix column" },
+	{ 'kTRC',				L"Gray tone reproduction curve" },
+	{ 'lumi',				L"Luminance" },
+	{ 'meas',				L"Alternative measurement type" },
+	{ 'meta',				L"Metadata dictionary" },
+	{ 'mmod',				L"Make and model" },
+	{ 'MS00',				L"Windows Color System embedded profile" },
+	{ 'ncl2',				L"Named color 2" },
+	{ 'ncol',				L"Named color" },
+	{ 'ndin',				L"Native display information" },
+	{ 'Pmtr',				L"GretagMacbeth private" },
+	{ 'pre0',				L"Preview 0" },
+	{ 'pre1',				L"Preview 1" },
+	{ 'pre2',				L"Preview 2" },
+	{ 'ps2i',				L"PostScript 2 rendering intent" },
+	{ 'ps2s',				L"PostScript 2 color space array" },
+	{ 'psd0',				L"PostScript 2 color rendering dictionary 0" },
+	{ 'psd1',				L"PostScript 2 color rendering dictionary 1" },
+	{ 'psd2',				L"PostScript 2 color rendering dictionary 2" },
+	{ 'psd3',				L"PostScript 2 color rendering dictionary 3" },
+	{ 'pseq',				L"Profile sequence description" },
+	{ 'psid',				L"Profile sequence ID" },
+	{ 'psvm',				L"PostScript 2 color rendering dictionary VM Size" },
+	{ 'ptcn',				L"Print condition" },
+	{ 'resp',				L"Output response" },
+	{ 'rig0',				L"Perceptual rendering intent gamut" },
+	{ 'rig2',				L"Saturation rendering intent gamut" },
+	{ 'rpoc',				L"Reflection print output colorimetry" },
+	{ 'rTRC',				L"Red tone reproduction curve" },
+	{ 'rXYZ',				L"Red matrix column" },
+	{ 'scrd',				L"Screening description" },
+	{ 'scrn',				L"Screening" },
+	{ 'targ',				L"Characterization target data set name" },
+	{ 'tech',				L"Technology" },
+	{ 'vcgt',				L"Video card gamma" },
+	{ 'view',				L"Viewing conditions" },
+	{ 'vued',				L"Viewing conditions description" },
+	{ 'wtpt',				L"Media white point" }
+	//{ '',				L"" },
+	//{ '',				L"" },
+	//{ '',				L"" },
+	//{ '',				L"" },
+};
+
 // Constructor
 //
 Profile::Profile(const wchar_t * profileName) :
@@ -149,6 +238,7 @@ Profile::Profile(const wchar_t * profileName) :
 		ProfileHeader(0),
 		TagCount(0),
 		TagTable(0),
+		sortedTags(0),
 		pVCGT(0),
 		pLUT(0),
 		vcgtIndex(-1),
@@ -169,6 +259,9 @@ Profile::~Profile() {
 	}
 	if (TagTable) {
 		delete [] TagTable;
+	}
+	if (sortedTags) {
+		delete [] sortedTags;
 	}
 	if (ProfileHeader) {
 		delete [] ProfileHeader;
@@ -285,7 +378,7 @@ Profile * Profile::GetAllProfiles(HKEY hKeyBase, const wchar_t * registryKey, bo
 // This routine serves to two roles: removing a profile's association with a monitor, on either
 // the user or system list, and setting the default profile for a monitor (either list).  In both
 // cases the profile name is removed from the list.  In the case of setting the default profile,
-// the name is reinserted at the end of the list.
+// the name is then reinserted at the end of the list.
 //
 bool Profile::EditRegistryProfileList(HKEY hKeyBase, const wchar_t * registryKey, bool moveToEnd) {
 	wchar_t profileName[1024];
@@ -347,7 +440,7 @@ bool Profile::EditRegistryProfileList(HKEY hKeyBase, const wchar_t * registryKey
 				}
 
 				// If moveToEnd is false, we just removed a profile association.  If moveToEnd is true,
-				// we reinsert it at the end of the list and it becomes our new default profile.
+				// we reinsert it at the end of the list and it becomes the new default profile.
 				//
 				if (moveToEnd) {
 
@@ -380,7 +473,7 @@ bool Profile::EditRegistryProfileList(HKEY hKeyBase, const wchar_t * registryKey
 
 // Try to make one of the many four "character" entries in an ICC profile display well.
 // Offer four spaces as an option for zero, but return true to indicate the zero.
-// Otherwise, return the characters with space substituted for any zeros in the entry.
+// Otherwise, return the characters with spaces substituted for any zeros in the entry.
 //
 bool ConvertFourBytesForDisplay(DWORD bytes, __out_bcount(len) wchar_t * output, size_t len) {
 	if ( len < (5 * sizeof(wchar_t)) ) {
@@ -392,12 +485,44 @@ bool ConvertFourBytesForDisplay(DWORD bytes, __out_bcount(len) wchar_t * output,
 	}
 	BYTE * pb = reinterpret_cast<BYTE *>(&bytes);
 	for ( size_t i = 0; i < 4; ++i ) {
-		output[i] = (*pb) ? static_cast<wchar_t>(*pb) : L' ';
+		output[i] = ( (*pb >= 32) && (*pb < 127) ) ? static_cast<wchar_t>(*pb) : L' ';
 		++pb;
 	}
 	output[4] = 0;
 	return false;
 }
+
+// Routine for qsort() to call to help create a sorted index into the tag table
+//
+	int ComparePtrToDWORD(const void * elem1, const void * elem2) {
+		DWORD item1;
+		DWORD item2;
+		const BYTE * ptr1 = *reinterpret_cast<const BYTE * const *>(elem1);
+		const BYTE * ptr2 = *reinterpret_cast<const BYTE * const *>(elem2);
+		BYTE * pb = reinterpret_cast<BYTE *>(&item1);
+		for (size_t i = 0; i < 4; ++i) {
+			if ( (ptr1[i] >= 'a') && (ptr1[i] <= 'z') ) {
+				pb[i] = ptr1[i] + 'A' - 'a';
+			} else {
+				pb[i] = ptr1[i];
+			}
+		}
+		pb = reinterpret_cast<BYTE *>(&item2);
+		for (size_t i = 0; i < 4; ++i) {
+			if ( (ptr2[i] >= 'a') && (ptr2[i] <= 'z') ) {
+				pb[i] = ptr2[i] + 'A' - 'a';
+			} else {
+				pb[i] = ptr2[i];
+			}
+		}
+		if (item1 < item2) {
+			return -1;
+		} else if (item1 == item2) {
+			return 0;
+		} else {
+			return 1;
+		}
+	}
 
 // Load profile info from disk
 //
@@ -405,6 +530,10 @@ wstring Profile::LoadFullProfile(bool forceReload) {
 
 	wstring s;
 	wchar_t buf[1024];
+	wchar_t displayChars[5];
+	BYTE * pb;
+	const wchar_t * lookupString;
+	bool foundNonZero;
 
 	// Quit early if no profile
 	//
@@ -439,6 +568,10 @@ wstring Profile::LoadFullProfile(bool forceReload) {
 			delete [] TagTable;
 			TagTable = 0;
 		}
+		if (sortedTags) {
+			delete [] sortedTags;
+			sortedTags = 0;
+		}
 		vcgtIndex = -1;
 		if (pVCGT) {
 			delete [] pVCGT;
@@ -469,8 +602,6 @@ wstring Profile::LoadFullProfile(bool forceReload) {
 	//
 	StringCbCat(filepath, sizeof(filepath), L"\\");
 	StringCbCat(filepath, sizeof(filepath), ProfileName.c_str());
-
-	//StringCbCopy(filepath, sizeof(filepath), L"C:\\DeleteMe\\DeleteMe.txt");
 
 	HANDLE hFile = CreateFileW(
 			filepath,
@@ -560,7 +691,228 @@ wstring Profile::LoadFullProfile(bool forceReload) {
 		ValidationFailures += buf;
 	}
 
-	// We could do more validation if there is a reason to do it here ...
+	// The Color Management Module (CMM) should be one of the known ones, or zero
+	//
+	if (ProfileHeader->phCMMType) {
+		lookupString = LookupName( knownCMMs, _countof(knownCMMs), swap32(ProfileHeader->phCMMType) );
+		if ( 0 == *lookupString ) {
+			ConvertFourBytesForDisplay(ProfileHeader->phCMMType, displayChars, sizeof(displayChars));
+			StringCbPrintf(
+					buf,
+					sizeof(buf),
+					L"The profile's preferred Color Management Module (CMM) is unrecognized.\r\n"
+					L"The preferred CMM is reported as '%s', but should be either zero or a registered CMM.\r\n\r\n",
+					displayChars );
+			ValidationFailures += buf;
+		}
+	}
+
+	// Report very high version numbers
+	//
+	pb = reinterpret_cast<BYTE *>(&ProfileHeader->phVersion);
+	if ( *pb > 9 ) {
+		ValidationFailures += L"The profile's version number is unrecognized.\r\nThe version is reported as ";
+		StringCbPrintf(buf, sizeof(buf), L"%d.%d.%d .\r\n\r\n", pb[0], (pb[1]>>4), (pb[1]&0x0F));
+		ValidationFailures += buf;
+	}
+
+	// The profile class should be one of the known ones
+	//
+	lookupString = LookupName( profileClasses, _countof(profileClasses), swap32(ProfileHeader->phClass) );
+	if ( 0 == *lookupString ) {
+		ConvertFourBytesForDisplay(ProfileHeader->phClass, displayChars, sizeof(displayChars));
+		StringCbPrintf(
+				buf,
+				sizeof(buf),
+				L"The profile's profile/device class is unrecognized.\r\n"
+				L"The class is reported as '%s', but should be 'mntr' representing a Display Device profile.\r\n\r\n",
+				displayChars );
+		ValidationFailures += buf;
+	}
+
+	// The color space should be a known one
+	//
+	lookupString = LookupName( colorSpaces, _countof(colorSpaces), swap32(ProfileHeader->phDataColorSpace) );
+	if ( 0 == *lookupString ) {
+		ConvertFourBytesForDisplay(ProfileHeader->phDataColorSpace, displayChars, sizeof(displayChars));
+		StringCbPrintf(
+				buf,
+				sizeof(buf),
+				L"The profile's color space of data is unrecognized.\r\n"
+				L"The color space is reported as '%s', but should be 'RGB ' for a Display Device profile.\r\n\r\n",
+				displayChars );
+		ValidationFailures += buf;
+	}
+
+	// The profile connection space should be a known one
+	//
+	lookupString = LookupName( colorSpaces, _countof(colorSpaces), swap32(ProfileHeader->phConnectionSpace) );
+	if ( 0 == *lookupString ) {
+		ConvertFourBytesForDisplay(ProfileHeader->phConnectionSpace, displayChars, sizeof(displayChars));
+		StringCbPrintf(
+				buf,
+				sizeof(buf),
+				L"The profile's connection space (PCS) is unrecognized.\r\n"
+				L"The Profile Connection Space is reported as '%s', but should be 'XYZ ' for a Display Device profile.\r\n\r\n",
+				displayChars );
+		ValidationFailures += buf;
+	}
+
+	// The timestamp should pass a few tests
+	//
+	dateTimeNumber * dt = reinterpret_cast<dateTimeNumber *>(&ProfileHeader->phDateTime[0]);
+	dateTimeNumber dateTime;
+	dateTime.year   = swap16(dt->year);
+	dateTime.month  = swap16(dt->month);
+	dateTime.day    = swap16(dt->day);
+	dateTime.hour   = swap16(dt->hour);
+	dateTime.minute = swap16(dt->minute);
+	dateTime.second = swap16(dt->second);
+	if ( (dateTime.year < 1990) || (dateTime.year > 2111) ||
+		 (dateTime.month > 12) ||
+		 (dateTime.day > 31) ||
+		 (dateTime.hour > 24) ||
+		 (dateTime.minute > 60) ||
+		 (dateTime.second > 60)
+	) {
+		StringCchPrintf(
+			buf,
+			_countof(buf),
+			L"The profile's date and time of first creation are unreasonable.\r\n"
+			L"The timestamp is reported as %04d-%02d-%02d %02d:%02d:%02dZ.\r\n\r\n", // RFC3389, NOTE: in 5.6
+			dateTime.year,
+			dateTime.month,
+			dateTime.day,
+			dateTime.hour,
+			dateTime.minute,
+			dateTime.second );
+		ValidationFailures += buf;
+	}
+
+	// The signature has only one permissible value
+	//
+	if ( 'acsp' != swap32(ProfileHeader->phSignature) ) {
+		ValidationFailures += L"The profile does not contain the required signature.\r\n";
+		ConvertFourBytesForDisplay(ProfileHeader->phSignature, displayChars, sizeof(displayChars));
+		StringCbPrintf(buf, sizeof(buf), L"The four characters '%s' should be 'acsp'.\r\n\r\n", displayChars);
+		ValidationFailures += buf;
+	}
+
+	// The primary platform should be one of the known ones, or zero
+	//
+	if (ProfileHeader->phPlatform) {
+		lookupString = LookupName( knownPlatforms, _countof(knownPlatforms), swap32(ProfileHeader->phPlatform) );
+		if ( 0 == *lookupString ) {
+			ConvertFourBytesForDisplay(ProfileHeader->phPlatform, displayChars, sizeof(displayChars));
+			StringCbPrintf(
+					buf,
+					sizeof(buf),
+					L"The profile's primary platform is unrecognized.\r\n"
+					L"The primary platform is reported as '%s', but should be either zero or a registered primary platform.\r\n\r\n",
+					displayChars );
+			ValidationFailures += buf;
+		}
+	}
+
+	// Only two flag bits are defined
+	//
+	DWORD flags = swap32(ProfileHeader->phProfileFlags);
+	if ( 0 != (flags & ~0xFFFF0000) ) {
+		if ( 0 != (flags & ~0xFFFF0003) ) {
+			ValidationFailures += L"The profile's flags field has reserved bits set.  The low-order 16 bits are specified by the ICC.\r\n";
+		} else {
+			ValidationFailures += L"The profile's flags field indicates that this profile is intended to be embedded in an image.\r\n";
+		}
+		StringCbPrintf(
+				buf,
+				sizeof(buf),
+				L"The value stored in the low-order 16 bits is 0x%04x.\r\n\r\n", (0x0000FFFF & flags) );
+		ValidationFailures += buf;
+	}
+
+	// I'm going to give everyone a free pass on anything they put in the manufacturer and
+	// model fields.  The ICC says that these too must be registered or zero, but I don't think
+	// that's reasonable.
+	//
+
+	// Four bits are defined in the low-order 32 bits of the attributes field
+	//
+	flags = swap32(ProfileHeader->phAttributes[1]);
+	if ( 0 != (flags & ~0x0000000F) ) {
+		ValidationFailures += L"The profile's attributes field has reserved bits set.  The low-order 32 bits are specified by the ICC.\r\n";
+		StringCbPrintf(
+				buf,
+				sizeof(buf),
+				L"The value stored in the low-order 32 bits is 0x%08x.\r\n\r\n",
+				flags );
+		ValidationFailures += buf;
+	}
+
+	// There are four valid rendering intents, numbered 0 to 3
+	//
+	flags = swap32(ProfileHeader->phRenderingIntent);
+	if ( 0 != (flags & ~0x00000003) ) {
+		ValidationFailures += L"The profile's specified rendering intent is not one of the four valid values.\r\n";
+		StringCbPrintf(
+				buf,
+				sizeof(buf),
+				L"The value specified for rendering intent is 0x%08x.\r\n\r\n",
+				flags );
+		ValidationFailures += buf;
+	}
+
+	// The only legal PCS illuminant is D50, defined as X=0.9642, Y=1.0000, Z=0.8249 and encoded
+	// (according to the version 4.2.0.0 ICC spec) as X=7B6Bh, Y=8000h, Z=6996h.  These numbers
+	// are specified for the ICC's fixed-16 format and need to be doubled to match the s15fixed16
+	// format used by the CIEXYZ fields.  I also allow some fudge factor since they only need to
+	// be right to four digits (1 part in 10000, not 1 in 65536).
+	//
+	long X = swap32(ProfileHeader->phIlluminant.ciexyzX);
+	long Y = swap32(ProfileHeader->phIlluminant.ciexyzY);
+	long Z = swap32(ProfileHeader->phIlluminant.ciexyzZ);
+	if ( (X < 0x0F6D3) || (X > 0x0F6D9) ||
+		 (Y < 0x0FFFC) || (Y > 0x10003) ||
+		 (Z < 0x0D329) || (Z > 0x0D32F) ) {
+		ValidationFailures += L"The profile's PCS illuminant is not D50 (X=0.9642, Y=1.0000, Z=0.8249) as specified by the ICC.\r\n";
+		StringCbPrintf(
+				buf,
+				sizeof(buf),
+				L"The value specified for PCS illuminant is X=%6.4f, Y=%6.4f, Z=%6.4f .\r\n\r\n",
+				double(X) / double(65536),
+				double(Y) / double(65536),
+				double(Z) / double(65536) );
+		ValidationFailures += buf;
+	}
+
+	// I'm giving another free pass on the creator field.  Why the ICC feels that every profile
+	// creator must be registered with them is beyond me.
+	//
+
+	// Almost no one is using the profile ID field, which is supposed to be a checksum calculated
+	// using RFC 1321 MD5 128bit after zeroing the flags (phProfileFlags), rendering intent
+	// (phRenderingIntent) and this profile ID (not defined in Microsoft's icm.h, called icProfileID
+	// in the ICC's icProfileHeader.h).  The profile ID was apparently introduced in profile version
+	// 4.0.0, it's not in the 2.4.0 spec.
+	//
+	// Maybe come back to it later ... skip it for now.
+	//
+
+	// The rest of the profile header is supposed to be all zeros.
+	//
+	foundNonZero = false;
+	pb = 16 + sizeof(ProfileHeader->phCreator) + reinterpret_cast<BYTE *>(&ProfileHeader->phCreator);
+	BYTE * pbEnd = sizeof(PROFILEHEADER) + reinterpret_cast<BYTE *>(ProfileHeader);
+	for ( ; pb < pbEnd; ++pb) {
+		if (*pb) {
+			foundNonZero = true;
+			break;
+		}
+	}
+	if (foundNonZero) {
+		ValidationFailures += L"The profile's reserved bytes following the profile ID are not zero as specified by the ICC.\r\n";
+		StringCbPrintf(buf, sizeof(buf), L"The value 0x%02x was found in the reserved area.\r\n\r\n", *pb );
+		ValidationFailures += buf;
+	}
 
 	// Read the tag count
 	//
@@ -580,7 +932,7 @@ wstring Profile::LoadFullProfile(bool forceReload) {
 	//
 	testTagCount = swap32(testTagCount);
 	if (testTagCount > 1024) {
-		wstring message = L"Tag count in profile file \"";
+		wstring message = L"The tag count in profile file \"";
 		message += filepath;
 		StringCbPrintf(
 				buf,
@@ -629,21 +981,30 @@ wstring Profile::LoadFullProfile(bool forceReload) {
 		return ErrorString;
 	}
 
-	// Store our version in little-endian format
+	// Store our version of the tag table in little-endian format
 	//
-	for (size_t i = 0; i < TagCount; i++) {
+	for (size_t i = 0; i < TagCount; ++i) {
 		TagTable[i].Signature = swap32(TagTable[i].Signature);
 		TagTable[i].Offset = swap32(TagTable[i].Offset);
 		TagTable[i].Size = swap32(TagTable[i].Size);
+	}
 
-		// Sanity test every tag table entry
-		//
+	// Generate a sort order for the tags
+	//
+	sortedTags = new DWORD *[TagCount];
+	for (size_t i = 0; i < TagCount; ++i) {
+		sortedTags[i] = &TagTable[i].Signature;
+	}
+	qsort(sortedTags, TagCount, sizeof(DWORD *), &ComparePtrToDWORD);
+
+	// Sanity test every tag table entry
+	//
+	for (size_t i = 0; i < TagCount; ++i) {
 		unsigned __int64 testSize = TagTable[i].Offset + TagTable[i].Size;
 		if ( testSize > static_cast<unsigned __int64>(ProfileSize.QuadPart) ) {
 			wstring message = L"File \"";
 			message += filepath;
 			message += L"\" is not a valid ICC profile.\r\nThe tag '";
-			wchar_t displayChars[5];
 			ConvertFourBytesForDisplay(swap32(TagTable[i].Signature), displayChars, sizeof(displayChars));
 			StringCbPrintf(
 					buf,
@@ -796,7 +1157,7 @@ wstring Profile::LoadFullProfile(bool forceReload) {
 
 					// Yes, there is room in the 'vcgt' for a 2 byte-per-entry table.  Is every other entry zero?
 					//
-					bool foundNonZero = false;
+					foundNonZero = false;
 					LUT * testLUT = reinterpret_cast<LUT *>(&pVCGT->vcgtContents.t.vcgtData[0]);
 					for (size_t i = 0; i < 256; ++i) {
 						if ( 0 != (testLUT->red[i] & 0xFF00) ) {
@@ -1065,10 +1426,7 @@ wstring Profile::DetailsString(void) {
 
 	// Display validation failures, if any
 	//
-	if ( !ValidationFailures.empty() ) {
-		s += L"There were issues found when loading this profile:\r\n";
-		s += ValidationFailures;
-	}
+	s += ValidationFailures;
 
 	// Display the profile header fields
 	//
@@ -1159,8 +1517,8 @@ wstring Profile::DetailsString(void) {
 	s += L"\r\n    Use only with embedded color data:  ";
 	s += (0 != (flags & 0x00000002)) ? L"True" : L"False";
 	s += L"\r\n";
-	if ( 0 != (flags & ~0x00000002) ) {
-		StringCbPrintf(buf, sizeof(buf), L"  => Undefined flags set:  0x%08x\r\n", flags);
+	if ( 0 != (flags & ~0xFFFF0003) ) {
+		StringCbPrintf(buf, sizeof(buf), L"  => Undefined flags set in low-order 16 bits:  0x%08x\r\n", flags);
 		s += buf;
 	}
 	s += L"  Device manufacturer:  ";
@@ -1179,12 +1537,11 @@ wstring Profile::DetailsString(void) {
 	s += L"\r\n    Color or B&W media:  ";
 	s += (0 != (flags & 0x00000008)) ? L"Black & white" : L"Color";
 	s += L"\r\n";
-	if ( (0 != (flags & ~0x0000000F)) || (0 != ProfileHeader->phAttributes[0]) ) {
+	if ( 0 != (flags & ~0x0000000F) ) {
 		StringCbPrintf(
 				buf,
 				sizeof(buf),
-				L"  => Undefined flags set:  0x%08x%08x\r\n",
-				swap32(ProfileHeader->phAttributes[0]),
+				L"  => Undefined flags set:  0x%08x\r\n",
 				flags );
 		s += buf;
 	}
@@ -1227,22 +1584,18 @@ wstring Profile::DetailsString(void) {
 
 	StringCbPrintf(buf, sizeof(buf), L"\r\nProfile contains %d tags:\r\n", TagCount);
 	s += buf;
-	for (size_t i = 0; i < TagCount; i++) {
-		ConvertFourBytesForDisplay(swap32(TagTable[i].Signature), displayChars, sizeof(displayChars));
-		StringCbPrintf(buf, sizeof(buf), L"'%s'", displayChars);
+	for (size_t i = 0; i < TagCount; ++i) {
+		DWORD tagSignature = *sortedTags[i];
+		ConvertFourBytesForDisplay(swap32(tagSignature), displayChars, sizeof(displayChars));
+		lookupString = LookupName( knownTags, _countof(knownTags), tagSignature );
+		StringCbPrintf(buf, sizeof(buf), L"  %s:  %s\r\n", displayChars, lookupString);
 		s += buf;
-		if (i < TagCount - 1) {
-			s += L", ";
-		}
 	}
+
 	if (-1 == vcgtIndex) {
-		s += L"\r\n\r\nProfile does not include a Video Card Gamma Tag\r\n";
+		s += L"\r\nProfile does not include a Video Card Gamma Tag\r\n";
 	} else {
-		s += L"\r\n\r\nProfile includes a Video Card Gamma Tag:\r\n";
-		ConvertFourBytesForDisplay(swap32(vcgtHeader.vcgtSignature), displayChars, sizeof(displayChars));
-		StringCbPrintf(buf, sizeof(buf), L"  Signature: '%s'", displayChars);
-		s += buf;
-		s += L"\r\n  Type: ";
+		s += L"\r\nProfile includes a Video Card Gamma Tag:\r\n  Type: ";
 		if (VCGT_TYPE_TABLE == vcgtHeader.vcgtType) {
 			s += L"Table";
 			StringCbPrintf(buf, sizeof(buf), L"\r\n  Channels: %d", vcgtHeader.vcgtContents.t.vcgtChannels);

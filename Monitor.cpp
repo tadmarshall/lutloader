@@ -10,7 +10,7 @@
 #include "Utility.h"
 //#define STRSAFE_USE_SECURE_CRT 1
 #include <strsafe.h>
-#include <banned.h>
+//#include <banned.h>
 
 // Optional "features"
 //

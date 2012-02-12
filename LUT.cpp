@@ -3,7 +3,7 @@
 
 #include "stdafx.h"
 #include "LUT.h"
-#include <banned.h>
+//#include <banned.h>
 
 // Function to test LUT for linearity
 //

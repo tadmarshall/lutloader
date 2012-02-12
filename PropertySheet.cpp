@@ -12,7 +12,7 @@
 #include "resource.h"
 #include "Utility.h"
 #include <strsafe.h>
-#include <banned.h>
+//#include <banned.h>
 
 // Optional "features"
 //
