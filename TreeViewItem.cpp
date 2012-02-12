@@ -17,9 +17,7 @@ extern HINSTANCE g_hInst;
 // Constructor
 //
 TreeViewItem::TreeViewItem(TREEVIEW_ITEM_TYPE itemType) :
-//TreeViewItem::TreeViewItem(TREEVIEW_ITEM_TYPE itemType, const wchar_t * tviText) :
 		ItemType(itemType),
-		//ItemText(tviText),
 		MonitorPtr(0),
 		ProfilePtr(0),
 		hTreeItem(0)
@@ -86,7 +84,6 @@ void TreeViewItem::Handle_WM_CONTEXTMENU(MonitorPage * monitorPage, POINT * scre
 
 	switch (ItemType) {
 		case TREEVIEW_ITEM_TYPE_NONE:
-			return;
 			break;
 
 		case TREEVIEW_ITEM_TYPE_MONITOR:
@@ -143,24 +140,35 @@ void TreeViewItem::ProfileContextMenu(MonitorPage * monitorPage, POINT * screenC
 	} else {
 		menuItemInfo.dwTypeData = isUser ? L"Set as default user profile (inactive)" : L"Set as default system profile (inactive)";
 	}
+	ProfilePtr->LoadFullProfile(false);
+	menuItemInfo.wID = ID_SET_DEFAULT_PROFILE;
 	if ( (isUser && (ProfilePtr == userProfile)) || (!isUser && (ProfilePtr == systemProfile)) ) {
 		menuItemInfo.fMask = MIIM_STRING | MIIM_ID | MIIM_STATE;
 		menuItemInfo.fState = MFS_DISABLED | MFS_CHECKED;
+	} else if ( !ProfilePtr->GetErrorString().empty() ) {
+		menuItemInfo.fMask = MIIM_STRING | MIIM_ID | MIIM_STATE;
+		menuItemInfo.fState = MFS_DISABLED;
 	} else {
 		menuItemInfo.fMask = MIIM_STRING | MIIM_ID;
 	}
-	menuItemInfo.wID = ID_SET_DEFAULT_PROFILE;
 	InsertMenuItem(hPopup, 0, TRUE, &menuItemInfo);
 
-	//menuItemInfo.dwTypeData = L"Remove association";
-	//InsertMenuItem(hPopup, 1, TRUE, &menuItemInfo);
+	menuItemInfo.wID = ID_REMOVE_ASSOCIATION;
+	if ( (isUser && (ProfilePtr == userProfile)) || (!isUser && (ProfilePtr == systemProfile)) ) {
+		menuItemInfo.fMask = MIIM_STRING | MIIM_ID | MIIM_STATE;
+		menuItemInfo.fState = MFS_DISABLED;
+	} else {
+		menuItemInfo.fMask = MIIM_STRING | MIIM_ID;
+	}
+	menuItemInfo.dwTypeData = L"Remove association";
+	InsertMenuItem(hPopup, 1, TRUE, &menuItemInfo);
 
+	HWND hwndTreeView = monitorPage->GetTreeViewHwnd();
+	SendMessage(hwndTreeView, TVM_SELECTITEM, TVGN_CARET, reinterpret_cast<LPARAM>(hTreeItem));
 	flags = TPM_LEFTALIGN | TPM_TOPALIGN | TPM_NONOTIFY | TPM_RETURNCMD | TPM_RIGHTBUTTON | TPM_NOANIMATION;
 	id = TrackPopupMenuEx(hPopup, flags, screenClickPoint->x, screenClickPoint->y, monitorPage->GetHwnd(), NULL);
 
-	HWND hwndTreeView = monitorPage->GetTreeViewHwnd();
 	if ( ID_SET_DEFAULT_PROFILE == id ) {
-		ProfilePtr->LoadFullProfile(false);
 		bool success = monitor->SetDefaultProfile(ProfilePtr, isUser);
 		if ( isUser == monitor->GetActiveProfileIsUserProfile() ) {
 			pProfileLUT = ProfilePtr->GetLutPointer();
@@ -225,8 +233,57 @@ void TreeViewItem::ProfileContextMenu(MonitorPage * monitorPage, POINT * screenC
 			itemEx.stateMask = TVIS_BOLD;
 			SendMessage(hwndTreeView, TVM_SETITEM, 0, reinterpret_cast<LPARAM>(&itemEx));
 		}
+	} else 	if ( ID_REMOVE_ASSOCIATION == id ) {
+		bool success = monitor->RemoveProfileAssociation(ProfilePtr, isUser);
 
+		// If we don't have Administrator privileges and we hit the system profile,
+		// then we didn't actually change the setting (we just loaded the LUT)
+		//
+		if (success) {
+
+#if 0
+			// Unbold the currently bold item, make ourselves bold
+			//
+			HTREEITEM hParent = reinterpret_cast<HTREEITEM>(
+					SendMessage(
+							hwndTreeView,
+							TVM_GETNEXTITEM,
+							TVGN_PARENT,
+							reinterpret_cast<LPARAM>(hTreeItem) ) );
+			HTREEITEM hChild = reinterpret_cast<HTREEITEM>(
+					SendMessage(
+							hwndTreeView,
+							TVM_GETNEXTITEM,
+							TVGN_CHILD,
+							reinterpret_cast<LPARAM>(hParent) ) );
+			TVITEMEX itemEx;
+			SecureZeroMemory(&itemEx, sizeof(itemEx));
+			itemEx.mask = TVIF_HANDLE | TVIF_STATE;
+			while (hChild) {
+				if ( hChild != hTreeItem ) {
+					itemEx.hItem = hChild;
+					itemEx.state = TVIS_BOLD;
+					itemEx.stateMask = TVIS_BOLD;
+					SendMessage(hwndTreeView, TVM_GETITEM, 0, reinterpret_cast<LPARAM>(&itemEx));
+					if ( 0 != (itemEx.state & TVIS_BOLD) ) {
+						itemEx.state = 0;
+						itemEx.stateMask = TVIS_BOLD;
+						SendMessage(hwndTreeView, TVM_SETITEM, 0, reinterpret_cast<LPARAM>(&itemEx));
+					}
+				}
+				hChild = reinterpret_cast<HTREEITEM>(
+						SendMessage(
+								hwndTreeView,
+								TVM_GETNEXTITEM,
+								TVGN_NEXT,
+								reinterpret_cast<LPARAM>(hChild) ) );
+			}
+			itemEx.hItem = hTreeItem;
+			itemEx.state = TVIS_BOLD;
+			itemEx.stateMask = TVIS_BOLD;
+			SendMessage(hwndTreeView, TVM_SETITEM, 0, reinterpret_cast<LPARAM>(&itemEx));
+#endif
+		}
 	}
-	SendMessage(hwndTreeView, TVM_SELECTITEM, TVGN_CARET, reinterpret_cast<LPARAM>(hTreeItem));
 	DestroyMenu(hPopup);
 }

@@ -49,7 +49,6 @@ static HWND hwndTestMonitorItem = 0;				// HWND for test MonitorSummaryItem we c
 
 void SaveSettings(HWND hWnd) {
 	HKEY hKey = 0;
-	//if ( ERROR_SUCCESS == RegCreateKeyEx(HKEY_LOCAL_MACHINE, REGISTRY_SUBKEY, 0, 0, 0, KEY_SET_VALUE, 0, &hKey, 0) ) {
 	if ( ERROR_SUCCESS == RegCreateKeyEx(HKEY_CURRENT_USER, REGISTRY_SUBKEY, 0, 0, 0, KEY_SET_VALUE, 0, &hKey, 0) ) {
 		wchar_t buf[256];
 		WINDOWPLACEMENT wp;
@@ -74,6 +73,31 @@ void SaveSettings(HWND hWnd) {
 		if (summaryLutView) {
 			LUT_GRAPH_DISPLAY_STYLE style = summaryLutView->GetGraphDisplayStyle();
 			RegSetValueEx( hKey, GRAPH_DISPLAY_STYLE_NAME, NULL, REG_DWORD, reinterpret_cast<BYTE *>(&style), 4 );
+		}
+		size_t count = Monitor::GetListSize();
+		for (size_t i = 0; i < count; ++i) {
+			Monitor * monitor = Monitor::Get(i);
+			MonitorPage * page = monitor->GetMonitorPage();
+			if (page) {
+				HWND hwndTreeView = page->GetTreeViewHwnd();
+				if (hwndTreeView) {
+					RECT treeViewRect;
+					GetWindowRect(hwndTreeView, &treeViewRect);
+					StringCbPrintf(buf, sizeof(buf), L"TreeView %d width", i + 1);
+					int width = treeViewRect.right - treeViewRect.left;
+					RegSetValueEx( hKey, buf, NULL, REG_DWORD, reinterpret_cast<BYTE *>(&width), 4 );
+					StringCbPrintf(buf, sizeof(buf), L"TreeView %d node expansion", i + 1);
+					wchar_t buf2[256];
+					page->GetTreeViewNodeExpansionString(buf2, sizeof(buf2));
+					RegSetValueEx(
+							hKey,
+							buf,
+							NULL,
+							REG_SZ,
+							reinterpret_cast<BYTE *>(buf2),
+							sizeof(wchar_t) * (StringLength(buf2) + 1) );
+				}
+			}
 		}
 		RegCloseKey(hKey);
 	}
@@ -124,6 +148,36 @@ void RestoreSettings(HWND hWnd) {
 				if ( (REG_DWORD == dataType) && (4 == dataSize) ) {
 					if ( style >= LGDS_WHITE && style <= LGDS_GRADIENT ) {
 						summaryLutView->SetGraphDisplayStyle(style);
+					}
+				}
+			}
+		}
+		size_t count = Monitor::GetListSize();
+		for (size_t i = 0; i < count; ++i) {
+			Monitor * monitor = Monitor::Get(i);
+			MonitorPage * page = monitor->GetMonitorPage();
+			if (page) {
+				int width = 0;
+				StringCbPrintf(buf, sizeof(buf), L"TreeView %d width", i + 1);
+				if (ERROR_SUCCESS == RegQueryValueEx( hKey, buf, NULL, &dataType, reinterpret_cast<BYTE *>(&width), &dataSize )) {
+					if ( (REG_DWORD == dataType) && (4 == dataSize) ) {
+						page->RequestTreeViewWidth(width);
+					}
+				}
+				StringCbPrintf(buf, sizeof(buf), L"TreeView %d node expansion", i + 1);
+				wchar_t buf2[256];
+				dataSize = sizeof(buf2);
+				SecureZeroMemory(buf2, sizeof(buf2));
+				if (ERROR_SUCCESS == RegQueryValueEx(
+						hKey,
+						buf,
+						NULL,
+						&dataType,
+						reinterpret_cast<BYTE *>(buf2),
+						&dataSize)
+				) {
+					if ( (REG_SZ == dataType) && (12 == dataSize) ) {
+						page->SetTreeViewNodeExpansionString(buf2);
 					}
 				}
 			}

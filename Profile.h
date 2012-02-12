@@ -32,11 +32,12 @@ public:
 
 	wstring GetName(void) const;
 	LUT * GetLutPointer(void) const;
+	wstring GetErrorString(void) const;
 	wstring LoadFullProfile(bool forceReload);
 	wstring DetailsString(void);
 	LUT_COMPARISON CompareLUT(LUT * otherLUT, DWORD * maxError, DWORD * totalError);
 	bool HasEmbeddedWcsProfile(void);
-	bool SetDefaultProfile(HKEY hKeyBase, const wchar_t * registryKey);
+	bool EditRegistryProfileList(HKEY hKeyBase, const wchar_t * registryKey, bool moveToEnd);
 
 	static Profile * GetAllProfiles(HKEY hKeyBase, const wchar_t * registryKey, bool * perUser, ProfileList & profileList);
 

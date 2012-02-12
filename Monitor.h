@@ -23,6 +23,7 @@ public:
 	static void ClearList(bool freeAllMemory);
 
 	bool SetDefaultProfile(Profile * profile, bool userProfile);
+	bool RemoveProfileAssociation(Profile * profile, bool userProfile);
 	void SetMonitorPage(MonitorPage * pagePtr);
 	MonitorPage * GetMonitorPage(void);
 	void SetMonitorSummaryItem(MonitorSummaryItem * itemPtr);

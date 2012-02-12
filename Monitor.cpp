@@ -123,13 +123,31 @@ bool Monitor::SetDefaultProfile(Profile * profile, bool userProfile) {
 		StringCbCopy( registryKey, sizeof(registryKey),
 			L"Software\\Microsoft\\Windows NT\\CurrentVersion\\ICM\\ProfileAssociations\\Display");
 		StringCbCat(registryKey, sizeof(registryKey), &DeviceKey.c_str()[len]);
-		success = profile->SetDefaultProfile(HKEY_CURRENT_USER, registryKey);
+		success = profile->EditRegistryProfileList(HKEY_CURRENT_USER, registryKey, true);
 		UserProfile = profile;
 	} else {
 		len = StringLength(L"\\Registry\\Machine\\");
 		StringCbCopy(registryKey, sizeof(registryKey), &DeviceKey.c_str()[len]);
-		success = profile->SetDefaultProfile(HKEY_LOCAL_MACHINE, registryKey);
+		success = profile->EditRegistryProfileList(HKEY_LOCAL_MACHINE, registryKey, true);
 		SystemProfile = profile;
+	}
+	return success;
+}
+
+bool Monitor::RemoveProfileAssociation(Profile * profile, bool userProfile) {
+	wchar_t registryKey[1024];
+	int len;
+	bool success;
+	if ( userProfile ) {
+		len = StringLength(L"\\Registry\\Machine\\System\\CurrentControlSet\\Control\\Class");
+		StringCbCopy( registryKey, sizeof(registryKey),
+			L"Software\\Microsoft\\Windows NT\\CurrentVersion\\ICM\\ProfileAssociations\\Display");
+		StringCbCat(registryKey, sizeof(registryKey), &DeviceKey.c_str()[len]);
+		success = profile->EditRegistryProfileList(HKEY_CURRENT_USER, registryKey, false);
+	} else {
+		len = StringLength(L"\\Registry\\Machine\\");
+		StringCbCopy(registryKey, sizeof(registryKey), &DeviceKey.c_str()[len]);
+		success = profile->EditRegistryProfileList(HKEY_LOCAL_MACHINE, registryKey, false);
 	}
 	return success;
 }

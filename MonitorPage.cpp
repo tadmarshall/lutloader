@@ -37,6 +37,10 @@ MonitorPage::MonitorPage(Monitor * hostMonitor) :
 		tvRoot(0),
 		tvUserProfiles(0),
 		tvSystemProfiles(0),
+		requestedTreeViewWidth(0),
+		requestedRootExpansion(true),
+		requestedUserProfilesExpansion(false),
+		requestedSystemProfilesExpansion(false),
 		resetting(false)
 {
 }
@@ -61,6 +65,53 @@ HWND MonitorPage::GetTreeViewHwnd(void) const {
 
 Monitor * MonitorPage::GetMonitor(void) const {
 	return monitor;
+}
+
+void MonitorPage::RequestTreeViewWidth(int width) {
+	requestedTreeViewWidth = width;
+}
+
+void MonitorPage::GetTreeViewNodeExpansionString(wchar_t * str, size_t strSize) {
+	if (hwndTreeView) {
+		TVITEMEX itemEx;
+		bool userProfilesExpanded = false;
+
+		SecureZeroMemory(&itemEx, sizeof(itemEx));
+		itemEx.mask = TVIF_HANDLE | TVIF_STATE;
+		itemEx.stateMask = TVIS_EXPANDED;
+		itemEx.hItem = tvRoot;
+		SendMessage(hwndTreeView, TVM_GETITEM, 0, reinterpret_cast<LPARAM>(&itemEx));
+		bool rootExpanded = (0 != (itemEx.state & TVIS_EXPANDED));
+
+		if (tvUserProfiles) {
+			itemEx.hItem = tvUserProfiles;
+			SendMessage(hwndTreeView, TVM_GETITEM, 0, reinterpret_cast<LPARAM>(&itemEx));
+			userProfilesExpanded = (0 != (itemEx.state & TVIS_EXPANDED));
+		}
+
+		itemEx.hItem = tvSystemProfiles;
+		SendMessage(hwndTreeView, TVM_GETITEM, 0, reinterpret_cast<LPARAM>(&itemEx));
+		bool systemProfilesExpanded = (0 != (itemEx.state & TVIS_EXPANDED));
+
+		StringCbPrintf(str, strSize, L"%d,%d,%d", rootExpanded, userProfilesExpanded, systemProfilesExpanded);
+	}
+}
+
+void MonitorPage::SetTreeViewNodeExpansionString(wchar_t * str) {
+	int rootExpand;
+	int userProfilesExpand;
+	int systemProfilesExpand;
+	int nRead = swscanf_s(
+			str,
+			L"%d,%d,%d",
+			&rootExpand,
+			&userProfilesExpand,
+			&systemProfilesExpand );
+	if ( 3 == nRead ) {
+		requestedRootExpansion = (0 != rootExpand);
+		requestedUserProfilesExpansion = (0 != userProfilesExpand);
+		requestedSystemProfilesExpansion = (0 != systemProfilesExpand);
+	}
 }
 
 // Add a TreeViewItem to the end of the list
@@ -383,7 +434,15 @@ void MonitorPage::BuildTreeView(void) {
 		SendMessage(hwndTreeView, TVM_SORTCHILDREN, FALSE, reinterpret_cast<LPARAM>(tvSystemProfiles));
 	}
 	if ( !resetting ) {
-		SendMessage(hwndTreeView, TVM_EXPAND, TVE_EXPAND, reinterpret_cast<LPARAM>(tvRoot));
+		if (requestedRootExpansion) {
+			SendMessage(hwndTreeView, TVM_EXPAND, TVE_EXPAND, reinterpret_cast<LPARAM>(tvRoot));
+		}
+		if (requestedUserProfilesExpansion) {
+			SendMessage(hwndTreeView, TVM_EXPAND, TVE_EXPAND, reinterpret_cast<LPARAM>(tvUserProfiles));
+		}
+		if (requestedSystemProfilesExpansion) {
+			SendMessage(hwndTreeView, TVM_EXPAND, TVE_EXPAND, reinterpret_cast<LPARAM>(tvSystemProfiles));
+		}
 	}
 }
 
@@ -468,6 +527,36 @@ INT_PTR CALLBACK MonitorPage::MonitorPageProc(HWND hWnd, UINT uMessage, WPARAM w
 			anchorPreset.anchorRight = false;
 			Resize::AddAchorPreset(anchorPreset);
 
+			// Get the page's WINDOWINFO
+			//
+			SecureZeroMemory(&wiParent, sizeof(wiParent));
+			wiParent.cbSize = sizeof(wiParent);
+			GetWindowInfo(hWnd, &wiParent);
+
+			// If we have a TreeView width to restore, set it up before accounting for resizing
+			//
+			if (thisPage->requestedTreeViewWidth) {
+				GetWindowRect(thisPage->hwndTreeView, &rect);
+				int widthDelta = thisPage->requestedTreeViewWidth - (rect.right - rect.left);
+				if ( 0 != widthDelta ) {
+
+					rect.left -= wiParent.rcClient.left;
+					rect.top -= wiParent.rcClient.top;
+					rect.right -= wiParent.rcClient.left;
+					rect.bottom -= wiParent.rcClient.top;
+					rect.right += widthDelta;
+					MoveWindow(thisPage->hwndTreeView, rect.left, rect.top, rect.right - rect.left, rect.bottom - rect.top, FALSE);
+
+					GetWindowRect(thisPage->hwndEdit, &rect);
+					rect.left -= wiParent.rcClient.left;
+					rect.top -= wiParent.rcClient.top;
+					rect.right -= wiParent.rcClient.left;
+					rect.bottom -= wiParent.rcClient.top;
+					rect.left += widthDelta;
+					MoveWindow(thisPage->hwndEdit, rect.left, rect.top, rect.right - rect.left, rect.bottom - rect.top, FALSE);
+				}
+			}
+
 			// Fix up the size of the controls in case the Summary tab was resized
 			// before this tab was created.
 			//
@@ -481,26 +570,24 @@ INT_PTR CALLBACK MonitorPage::MonitorPageProc(HWND hWnd, UINT uMessage, WPARAM w
 				SIZE sizeDelta;
 				sizeDelta.cx = newSize.right - originalSize.right;
 				sizeDelta.cy = newSize.bottom - originalSize.bottom;
-				SecureZeroMemory(&wiParent, sizeof(wiParent));
-				wiParent.cbSize = sizeof(wiParent);
-				GetWindowInfo(hWnd, &wiParent);
+				if ( (0 != sizeDelta.cx) || (0 != sizeDelta.cy) ) {
+					GetWindowRect(thisPage->hwndEdit, &rect);
+					rect.left -= wiParent.rcClient.left;
+					rect.top -= wiParent.rcClient.top;
+					rect.right -= wiParent.rcClient.left;
+					rect.bottom -= wiParent.rcClient.top;
+					rect.right += sizeDelta.cx;
+					rect.bottom += sizeDelta.cy;
+					MoveWindow(thisPage->hwndEdit, rect.left, rect.top, rect.right - rect.left, rect.bottom - rect.top, FALSE);
 
-				GetWindowRect(thisPage->hwndEdit, &rect);
-				rect.left -= wiParent.rcClient.left;
-				rect.top -= wiParent.rcClient.top;
-				rect.right -= wiParent.rcClient.left;
-				rect.bottom -= wiParent.rcClient.top;
-				rect.right += sizeDelta.cx;
-				rect.bottom += sizeDelta.cy;
-				MoveWindow(thisPage->hwndEdit, rect.left, rect.top, rect.right - rect.left, rect.bottom - rect.top, FALSE);
-
-				GetWindowRect(thisPage->hwndTreeView, &rect);
-				rect.left -= wiParent.rcClient.left;
-				rect.top -= wiParent.rcClient.top;
-				rect.right -= wiParent.rcClient.left;
-				rect.bottom -= wiParent.rcClient.top;
-				rect.bottom += sizeDelta.cy;
-				MoveWindow(thisPage->hwndTreeView, rect.left, rect.top, rect.right - rect.left, rect.bottom - rect.top, FALSE);
+					GetWindowRect(thisPage->hwndTreeView, &rect);
+					rect.left -= wiParent.rcClient.left;
+					rect.top -= wiParent.rcClient.top;
+					rect.right -= wiParent.rcClient.left;
+					rect.bottom -= wiParent.rcClient.top;
+					rect.bottom += sizeDelta.cy;
+					MoveWindow(thisPage->hwndTreeView, rect.left, rect.top, rect.right - rect.left, rect.bottom - rect.top, FALSE);
+				}
 			}
 
 			// Tell the resizing system that its window list is out of date
@@ -660,7 +747,6 @@ INT_PTR CALLBACK MonitorPage::MonitorPageProc(HWND hWnd, UINT uMessage, WPARAM w
 				// Convert a right-click in the TreeView into a WM_CONTEXTMENU message
 				//
 				case NM_RCLICK:
-					//treeControlHwnd = GetDlgItem(hWnd, IDC_TREE1);
 					if ( pNMHDR->hwndFrom == thisPage->hwndTreeView ) {
 						SendMessage(hWnd, WM_CONTEXTMENU, reinterpret_cast<WPARAM>(thisPage->hwndTreeView), GetMessagePos());
 						SetWindowLongPtrW(hWnd, DWLP_MSGRESULT, TRUE);

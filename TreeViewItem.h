@@ -3,7 +3,7 @@
 
 #pragma once
 #include "stdafx.h"
-#include <commctrl.h>
+#include <commctrl.h>							// For HTREEITEM
 
 // Forward references
 //
@@ -27,7 +27,6 @@ class TreeViewItem {
 
 public:
 	TreeViewItem(TREEVIEW_ITEM_TYPE itemType);
-	//TreeViewItem(TREEVIEW_ITEM_TYPE itemType, const wchar_t * tviText);
 
 	void SetHTREEITEM(HTREEITEM hItem);
 	void SetMonitor(Monitor * monitor);

@@ -4,7 +4,6 @@
 #pragma once
 #include "stdafx.h"
 #include <commctrl.h>		// For HTREEITEM
-//#include "TreeViewItem.h"
 
 // Forward references
 //
@@ -19,6 +18,9 @@ public:
 
 	HWND GetHwnd(void) const;
 	HWND GetTreeViewHwnd(void) const;
+	void RequestTreeViewWidth(int);
+	void GetTreeViewNodeExpansionString(wchar_t * str, __in_bcount(str) size_t strSize);
+	void SetTreeViewNodeExpansionString(wchar_t * str);
 	void SetEditControlText(wstring newText);
 	Monitor * GetMonitor(void) const;
 	void Reset(void);
@@ -38,5 +40,9 @@ private:
 	HTREEITEM					tvRoot;
 	HTREEITEM					tvUserProfiles;
 	HTREEITEM					tvSystemProfiles;
+	int							requestedTreeViewWidth;
+	bool						requestedRootExpansion;
+	bool						requestedUserProfilesExpansion;
+	bool						requestedSystemProfilesExpansion;
 	bool						resetting;
 };
