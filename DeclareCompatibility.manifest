@@ -1,0 +1,10 @@
+﻿<assembly xmlns="urn:schemas-microsoft-com:asm.v1" manifestVersion="1.0">
+	<ms_compatibility:compatibility xmlns:ms_compatibility="urn:schemas-microsoft-com:compatibility.v1">
+		<ms_compatibility:application>
+			<!--Windows 7-->
+			<ms_compatibility:supportedOS Id="{35138b9a-5d96-4fbd-8e2d-a2440225f93a}" />
+			<!--Windows Vista-->
+			<ms_compatibility:supportedOS Id="{e2011457-1546-43c5-a5fe-008deee3d3f0}" />
+		</ms_compatibility:application>
+	</ms_compatibility:compatibility>
+</assembly>

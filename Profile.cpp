@@ -544,79 +544,84 @@ Profile * Profile::GetAllProfiles(HKEY hKeyBase, const wchar_t * registryKey, bo
 //
 bool Profile::EditRegistryProfileList(HKEY hKeyBase, const wchar_t * registryKey, bool moveToEnd) {
 	wchar_t profileName[1024];
-	HKEY hKey;
-	DWORD dataSize;
-	DWORD dataType;
+	HKEY hKey = 0;
+	DWORD dataSizeFrom = 0;
+	DWORD dataSizeTo = 0;
+	DWORD dataType = REG_MULTI_SZ;
 	bool success = false;
-
 	StringCbCopy(profileName, sizeof(profileName), ProfileName.c_str());
+	int profileNameLength = StringLength(profileName);
 	if (ERROR_SUCCESS == RegOpenKeyEx(hKeyBase, registryKey, 0, KEY_QUERY_VALUE | KEY_SET_VALUE, &hKey)) {
-		if (ERROR_SUCCESS == RegQueryValueEx(hKey, L"ICMProfile", NULL, NULL, NULL, &dataSize)) {
-			dataSize += 2 * sizeof(wchar_t);
-			BYTE * fromList = reinterpret_cast<BYTE *>(malloc(dataSize));
-			BYTE * toList = reinterpret_cast<BYTE *>(malloc(dataSize));
-			if ( fromList && toList ) {
-				SecureZeroMemory(fromList, dataSize);
-				RegQueryValueEx(hKey, L"ICMProfile", NULL, &dataType, fromList, &dataSize);
-				wchar_t * fromPtr = reinterpret_cast<wchar_t *>(fromList);
-				wchar_t * toPtr = reinterpret_cast<wchar_t *>(toList);
-				wchar_t * fp;
-				wchar_t * pn;
-
-				// Copy profiles that do not match the given profile name
-				//
-				while (*fromPtr) {
-					fp = fromPtr;
-					pn = profileName;
-
-					// Compare strings until we hit a difference or a NUL in either string
-					//
-					while ( *fp && *pn && (*fp == *pn) ) {
-						++pn;
-						++fp;
-					}
-					if ( *fp == *pn ) {
-
-						// The strings matched, so just skip over the source string
-						//
-						fromPtr = fp + 1;
-					} else {
-
-						// The strings did not match, so copy this one
-						//
-						while (*fromPtr) {
-							*toPtr++ = *fromPtr++;
-						}
-						++fromPtr;
-						*toPtr++ = 0;		// NUL-terminate the copied string
-					}
-				}
-
-				// If moveToEnd is false, we just removed a profile association.  If moveToEnd is true,
-				// we reinsert it at the end of the list and it becomes the new default profile.
-				//
-				if (moveToEnd) {
-
-					// We are done reading and skipping, now copy the profile name to the end
-					//
-					pn = profileName;
-					while (*pn) {
-						*toPtr++ = *pn++;
-					}
-					*toPtr++ = 0;			// NUL-terminate the copied string
-				}
-				*toPtr++ = 0;				// End string with an extra NUL
-
-				// Write the modified profile list to the registry
-				//
-				dataSize = static_cast<DWORD>(reinterpret_cast<BYTE *>(toPtr) - toList);
-				success = (ERROR_SUCCESS == RegSetValueEx(hKey, L"ICMProfile", NULL, dataType, toList, dataSize));
-			}
+		LONG returnValue = RegQueryValueEx(hKey, L"ICMProfile", NULL, NULL, NULL, &dataSizeFrom);
+		if (ERROR_FILE_NOT_FOUND == returnValue) {	// If value does not exist, try to create it
+			BYTE noData[4] = {0, 0, 0, 0};
+			returnValue = RegSetValueEx(hKey, L"ICMProfile", NULL, REG_MULTI_SZ, noData, 0);
+		}
+		if (ERROR_SUCCESS == returnValue) {
+			dataSizeFrom += 2 * sizeof(wchar_t);
+			dataSizeTo = dataSizeFrom + (sizeof(wchar_t) * (1 + profileNameLength));
+			BYTE * fromList = reinterpret_cast<BYTE *>(malloc(dataSizeFrom));
 			if (fromList) {
+				BYTE * toList = reinterpret_cast<BYTE *>(malloc(dataSizeTo));
+				if (toList) {
+					SecureZeroMemory(fromList, dataSizeFrom);
+					RegQueryValueEx(hKey, L"ICMProfile", NULL, &dataType, fromList, &dataSizeFrom);
+					wchar_t * fromPtr = reinterpret_cast<wchar_t *>(fromList);
+					wchar_t * toPtr = reinterpret_cast<wchar_t *>(toList);
+					wchar_t * fp;
+					wchar_t * pn;
+
+					// Copy profiles that do not match the given profile name
+					//
+					while (*fromPtr) {
+						fp = fromPtr;
+						pn = profileName;
+
+						// Compare strings until we hit a difference or a NUL in either string
+						//
+						while ( *fp && *pn && (*fp == *pn) ) {
+							++pn;
+							++fp;
+						}
+						if ( *fp == *pn ) {
+
+							// The strings matched, so just skip over the source string
+							//
+							fromPtr = fp + 1;
+						} else {
+
+							// The strings did not match, so copy this one
+							//
+							while (*fromPtr) {
+								*toPtr++ = *fromPtr++;
+							}
+							++fromPtr;
+							*toPtr++ = 0;		// NUL-terminate the copied string
+						}
+					}
+
+					// If moveToEnd is false, we just removed a profile association.  If moveToEnd is true,
+					// we reinsert it at the end of the list and it becomes the new default profile.
+					//
+					if (moveToEnd) {
+
+						// We are done reading and skipping, now copy the profile name to the end
+						//
+						pn = profileName;
+						while (*pn) {
+							*toPtr++ = *pn++;
+						}
+						*toPtr++ = 0;			// NUL-terminate the copied string
+					}
+					*toPtr++ = 0;				// End string with an extra NUL
+
+					// Write the modified profile list to the registry
+					//
+					dataSizeTo = static_cast<DWORD>(reinterpret_cast<BYTE *>(toPtr) - toList);
+					success = (ERROR_SUCCESS == RegSetValueEx(hKey, L"ICMProfile", NULL, dataType, toList, dataSizeTo));
+					free(toList);
+				}
 				free(fromList);
-			}
-			if (toList) {
-				free(toList);
 			}
 		}
 		RegCloseKey(hKey);
@@ -628,56 +633,58 @@ bool Profile::EditRegistryProfileList(HKEY hKeyBase, const wchar_t * registryKey
 //
 bool Profile::InsertIntoRegistryProfileList(HKEY hKeyBase, const wchar_t * registryKey) {
 	wchar_t profileName[1024];
-	int profileNameLength;
-	HKEY hKey;
-	DWORD dataSizeFrom;
-	DWORD dataSizeTo;
-	DWORD dataType;
+	HKEY hKey = 0;
+	DWORD dataSizeFrom = 0;
+	DWORD dataSizeTo = 0;
+	DWORD dataType = REG_MULTI_SZ;
 	bool success = false;
 	StringCbCopy(profileName, sizeof(profileName), ProfileName.c_str());
-	profileNameLength = StringLength(profileName);
+	int profileNameLength = StringLength(profileName);
 	if (ERROR_SUCCESS == RegOpenKeyEx(hKeyBase, registryKey, 0, KEY_QUERY_VALUE | KEY_SET_VALUE, &hKey)) {
-		if (ERROR_SUCCESS == RegQueryValueEx(hKey, L"ICMProfile", NULL, NULL, NULL, &dataSizeFrom)) {
+		LONG returnValue = RegQueryValueEx(hKey, L"ICMProfile", NULL, NULL, NULL, &dataSizeFrom);
+		if (ERROR_FILE_NOT_FOUND == returnValue) {	// If value does not exist, try to create it
+			BYTE noData[4] = {0, 0, 0, 0};
+			returnValue = RegSetValueEx(hKey, L"ICMProfile", NULL, REG_MULTI_SZ, noData, 0);
+		}
+		if (ERROR_SUCCESS == returnValue) {
 			dataSizeFrom += 2 * sizeof(wchar_t);
 			dataSizeTo = dataSizeFrom + (sizeof(wchar_t) * (1 + profileNameLength));
 			BYTE * fromList = reinterpret_cast<BYTE *>(malloc(dataSizeFrom));
-			BYTE * toList = reinterpret_cast<BYTE *>(malloc(dataSizeTo));
-			if ( fromList && toList ) {
-				SecureZeroMemory(fromList, dataSizeFrom);
-				RegQueryValueEx(hKey, L"ICMProfile", NULL, &dataType, fromList, &dataSizeFrom);
-				wchar_t * fromPtr = reinterpret_cast<wchar_t *>(fromList);
-				wchar_t * toPtr = reinterpret_cast<wchar_t *>(toList);
-				wchar_t * pn;
-
-				// Put the given profile name at the start of the list
-				//
-				pn = profileName;
-				while (*pn) {
-					*toPtr++ = *pn++;
-				}
-				*toPtr++ = 0;			// NUL-terminate the added string
-
-				// Copy all of the original profile names
-				//
-				while (*fromPtr) {
-					while (*fromPtr) {
-						*toPtr++ = *fromPtr++;
-					}
-					++fromPtr;
-					*toPtr++ = 0;		// NUL-terminate the copied string
-				}
-				*toPtr++ = 0;			// End string with an extra NUL
-
-				// Write the modified profile list to the registry
-				//
-				dataSizeTo = static_cast<DWORD>(reinterpret_cast<BYTE *>(toPtr) - toList);
-				success = (ERROR_SUCCESS == RegSetValueEx(hKey, L"ICMProfile", NULL, dataType, toList, dataSizeTo));
-			}
 			if (fromList) {
+				BYTE * toList = reinterpret_cast<BYTE *>(malloc(dataSizeTo));
+				if (toList) {
+					SecureZeroMemory(fromList, dataSizeFrom);
+					RegQueryValueEx(hKey, L"ICMProfile", NULL, &dataType, fromList, &dataSizeFrom);
+					wchar_t * fromPtr = reinterpret_cast<wchar_t *>(fromList);
+					wchar_t * toPtr = reinterpret_cast<wchar_t *>(toList);
+					wchar_t * pn;
+
+					// Put the given profile name at the start of the list
+					//
+					pn = profileName;
+					while (*pn) {
+						*toPtr++ = *pn++;
+					}
+					*toPtr++ = 0;			// NUL-terminate the added string
+
+					// Copy all of the original profile names
+					//
+					while (*fromPtr) {
+						while (*fromPtr) {
+							*toPtr++ = *fromPtr++;
+						}
+						++fromPtr;
+						*toPtr++ = 0;		// NUL-terminate the copied string
+					}
+					*toPtr++ = 0;			// End string with an extra NUL
+
+					// Write the modified profile list to the registry
+					//
+					dataSizeTo = static_cast<DWORD>(reinterpret_cast<BYTE *>(toPtr) - toList);
+					success = (ERROR_SUCCESS == RegSetValueEx(hKey, L"ICMProfile", NULL, dataType, toList, dataSizeTo));
+					free(toList);
+				}
 				free(fromList);
-			}
-			if (toList) {
-				free(toList);
 			}
 		}
 		RegCloseKey(hKey);

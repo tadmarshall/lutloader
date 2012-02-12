@@ -1,4 +1,4 @@
 ﻿<assembly xmlns="urn:schemas-microsoft-com:asm.v1" manifestVersion="1.0">
-	<assemblyIdentity name="LUTLoader" processorArchitecture="x86" type="win32" version="1.0.0.0" />
+	<assemblyIdentity version="1.0.0.0" processorArchitecture="X86" name="LUTLoader" type="win32" />
 	<description>LUT Loader</description>
 </assembly>

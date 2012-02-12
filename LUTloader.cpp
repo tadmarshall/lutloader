@@ -153,7 +153,7 @@ int WINAPI WinMain(
 	g_hInst = hInstance;
 
 #ifdef DEBUG_MEMORY_LEAKS
-	//_crtBreakAlloc = 240;		// To debug memory leaks, set this to allocation number ("{nnn}")
+	//_crtBreakAlloc = 221;		// To debug memory leaks, set this to allocation number ("{nnn}")
 #endif
 
 	// Turn on DEP, if available

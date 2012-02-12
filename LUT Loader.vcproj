@@ -26,6 +26,8 @@
 			>
 			<Tool
 				Name="VCPreBuildEventTool"
+				Description="Increment the build number"
+				CommandLine="buildnumber"
 			/>
 			<Tool
 				Name="VCCustomBuildTool"
@@ -42,17 +44,16 @@
 			<Tool
 				Name="VCCLCompilerTool"
 				Optimization="0"
-				PreprocessorDefinitions="_BIND_TO_CURRENT_CRT_VERSION=0"
 				StringPooling="true"
 				MinimalRebuild="true"
 				BasicRuntimeChecks="3"
-				RuntimeLibrary="3"
+				RuntimeLibrary="1"
 				EnableFunctionLevelLinking="true"
 				RuntimeTypeInfo="false"
 				UsePrecompiledHeader="1"
 				WarningLevel="4"
 				WarnAsError="false"
-				Detect64BitPortabilityProblems="true"
+				SuppressStartupBanner="true"
 				DebugInformationFormat="3"
 				EnablePREfast="true"
 			/>
@@ -71,7 +72,9 @@
 				OutputFile="$(OutDir)\LUTLoader.exe"
 				Version="1.0.0.0"
 				LinkIncremental="1"
+				SuppressStartupBanner="true"
 				AdditionalManifestDependencies=""
+				DelayLoadDLLs="msimg32.dll"
 				GenerateDebugInformation="true"
 				GenerateMapFile="false"
 				SubSystem="2"
@@ -82,7 +85,7 @@
 			/>
 			<Tool
 				Name="VCManifestTool"
-				AdditionalManifestFiles="AssemblyIdentity.manifest;DeclareDPIAware.manifest;DeclareUAC.manifest"
+				AdditionalManifestFiles="AssemblyIdentity.manifest;DeclareDPIAware.manifest;DeclareUAC.manifest;DeclareCompatibility.manifest"
 				SuppressStartupBanner="false"
 			/>
 			<Tool
@@ -130,15 +133,14 @@
 			<Tool
 				Name="VCCLCompilerTool"
 				Optimization="0"
-				PreprocessorDefinitions="_BIND_TO_CURRENT_CRT_VERSION=0"
 				StringPooling="true"
 				MinimalRebuild="true"
 				BasicRuntimeChecks="3"
-				RuntimeLibrary="3"
+				RuntimeLibrary="1"
 				EnableFunctionLevelLinking="true"
 				WarningLevel="4"
 				WarnAsError="false"
-				Detect64BitPortabilityProblems="true"
+				SuppressStartupBanner="true"
 				DebugInformationFormat="3"
 			/>
 			<Tool
@@ -156,7 +158,9 @@
 				OutputFile="$(OutDir)\LUTLoader.exe"
 				Version="1.0.0.0"
 				LinkIncremental="1"
+				SuppressStartupBanner="true"
 				AdditionalManifestDependencies=""
+				DelayLoadDLLs="msimg32.dll"
 				GenerateDebugInformation="true"
 				GenerateMapFile="false"
 				SubSystem="2"
@@ -167,7 +171,7 @@
 			/>
 			<Tool
 				Name="VCManifestTool"
-				AdditionalManifestFiles="AssemblyIdentity.manifest;DeclareDPIAware.manifest;DeclareUAC.manifest"
+				AdditionalManifestFiles="AssemblyIdentity.manifest;DeclareDPIAware.manifest;DeclareUAC.manifest;DeclareCompatibility.manifest"
 				SuppressStartupBanner="false"
 			/>
 			<Tool
@@ -216,15 +220,14 @@
 				Name="VCCLCompilerTool"
 				InlineFunctionExpansion="2"
 				EnableIntrinsicFunctions="true"
-				PreprocessorDefinitions="_BIND_TO_CURRENT_CRT_VERSION=0"
 				StringPooling="true"
-				RuntimeLibrary="2"
+				RuntimeLibrary="0"
 				EnableFunctionLevelLinking="true"
 				RuntimeTypeInfo="false"
 				UsePrecompiledHeader="0"
 				WarningLevel="4"
 				WarnAsError="false"
-				Detect64BitPortabilityProblems="true"
+				SuppressStartupBanner="true"
 				DebugInformationFormat="3"
 			/>
 			<Tool
@@ -242,6 +245,8 @@
 				OutputFile="$(OutDir)\LUTLoader.exe"
 				Version="1.0.0.0"
 				LinkIncremental="1"
+				SuppressStartupBanner="true"
+				DelayLoadDLLs="msimg32.dll"
 				GenerateDebugInformation="true"
 				GenerateMapFile="false"
 				SubSystem="2"
@@ -255,7 +260,7 @@
 			/>
 			<Tool
 				Name="VCManifestTool"
-				AdditionalManifestFiles="AssemblyIdentity.manifest;DeclareDPIAware.manifest;DeclareUAC.manifest"
+				AdditionalManifestFiles="AssemblyIdentity.manifest;DeclareDPIAware.manifest;DeclareUAC.manifest;DeclareCompatibility.manifest"
 				SuppressStartupBanner="false"
 			/>
 			<Tool
@@ -305,14 +310,13 @@
 				Name="VCCLCompilerTool"
 				InlineFunctionExpansion="2"
 				EnableIntrinsicFunctions="true"
-				PreprocessorDefinitions="_BIND_TO_CURRENT_CRT_VERSION=0"
 				StringPooling="true"
-				RuntimeLibrary="2"
+				RuntimeLibrary="0"
 				EnableFunctionLevelLinking="true"
 				UsePrecompiledHeader="0"
 				WarningLevel="4"
 				WarnAsError="false"
-				Detect64BitPortabilityProblems="true"
+				SuppressStartupBanner="true"
 				DebugInformationFormat="3"
 			/>
 			<Tool
@@ -330,6 +334,8 @@
 				OutputFile="$(OutDir)\LUTLoader.exe"
 				Version="1.0.0.0"
 				LinkIncremental="1"
+				SuppressStartupBanner="true"
+				DelayLoadDLLs="msimg32.dll"
 				GenerateDebugInformation="true"
 				GenerateMapFile="false"
 				SubSystem="2"
@@ -343,7 +349,7 @@
 			/>
 			<Tool
 				Name="VCManifestTool"
-				AdditionalManifestFiles="AssemblyIdentity.manifest;DeclareDPIAware.manifest;DeclareUAC.manifest"
+				AdditionalManifestFiles="AssemblyIdentity.manifest;DeclareDPIAware.manifest;DeclareUAC.manifest;DeclareCompatibility.manifest"
 				SuppressStartupBanner="false"
 			/>
 			<Tool
@@ -496,6 +502,10 @@
 			>
 			<File
 				RelativePath=".\AssemblyIdentity.manifest"
+				>
+			</File>
+			<File
+				RelativePath=".\DeclareCompatibility.manifest"
 				>
 			</File>
 			<File

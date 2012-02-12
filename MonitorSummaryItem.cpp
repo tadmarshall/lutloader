@@ -17,7 +17,6 @@
 #define SHOW_INACTIVE_PROFILE 0
 #define DRAW_FRAME 0
 #define DRAW_HIGHLIGHT 0
-#define MOUSEOVER_EFFECTS 1
 #define MOUSEOVER_DRAWS_FRAME 0
 #define SHOW_PAINT_COUNT 0
 
@@ -115,159 +114,163 @@ LRESULT CALLBACK MonitorSummaryItem::MonitorSummaryItemProc(HWND hWnd, UINT uMes
 
 		case WM_COMMAND:
 			thisView = reinterpret_cast<MonitorSummaryItem *>(static_cast<LONG_PTR>(GetWindowLongPtr(hWnd, DLGWINDOWEXTRA)));
-			if (thisView && thisView->monitor) {
-				if ( LOWORD(wParam) == IDC_LOAD_BUTTON ) {
-					myMonitor = thisView->monitor;
-					activeProfile = myMonitor->GetActiveProfile();
-					if (activeProfile) {
-						pProfileLUT = activeProfile->GetLutPointer();
-					} else {
-						pProfileLUT = 0;
-					}
-					if ( pProfileLUT ) {
-						myMonitor->WriteLutToCard(pProfileLUT);
-					} else {
-						LUT MyLUT;
-						GetSignedLUT(&MyLUT);
-						myMonitor->WriteLutToCard(&MyLUT);
-					}
-					myMonitor->ReadLutFromCard();
-					thisView->lutViewShowsProfile = false;
-					thisView->Update();
-					InvalidateRect(thisView->hwnd, NULL, FALSE);
-				} else if ( LOWORD(wParam) == IDC_RESCAN_BUTTON ) {
+			if (thisView) {
+				if (thisView->monitor) {
+					if ( LOWORD(wParam) == IDC_LOAD_BUTTON ) {
+						myMonitor = thisView->monitor;
+						activeProfile = myMonitor->GetActiveProfile();
+						if (activeProfile) {
+							pProfileLUT = activeProfile->GetLutPointer();
+						} else {
+							pProfileLUT = 0;
+						}
+						if ( pProfileLUT ) {
+							myMonitor->WriteLutToCard(pProfileLUT);
+						} else {
+							LUT MyLUT;
+							GetSignedLUT(&MyLUT);
+							myMonitor->WriteLutToCard(&MyLUT);
+						}
+						myMonitor->ReadLutFromCard();
+						thisView->lutViewShowsProfile = false;
+						thisView->Update();
+						InvalidateRect(thisView->hwnd, NULL, FALSE);
+					} else if ( LOWORD(wParam) == IDC_RESCAN_BUTTON ) {
 #if 0
-					// Try reading the LUT from the default "screen" DC
-					//
-					LUT myLUT;
-					BOOL bRet = 0;
-					HDC hDC = GetDC(0);
-					if (hDC) {
-						SecureZeroMemory(&myLUT, sizeof(LUT));
-						bRet = GetDeviceGammaRamp(hDC, &myLUT);
-						ReleaseDC(0, hDC);
-					}
+						// Try reading the LUT from the default "screen" DC
+						//
+						LUT myLUT;
+						BOOL bRet = 0;
+						HDC hDC = GetDC(0);
+						if (hDC) {
+							SecureZeroMemory(&myLUT, sizeof(LUT));
+							bRet = GetDeviceGammaRamp(hDC, &myLUT);
+							ReleaseDC(0, hDC);
+						}
 #endif
-					// A rescan can potentially find a completely different set of profiles, changes
-					// to user vs. system usage, etc., so we need to mostly act as if we were restarted as
-					// far as what we show in the UI
-					//
-					myMonitor = thisView->monitor;
-					myMonitor->Initialize();
-					MonitorPage * page = myMonitor->GetMonitorPage();
-					if (page) {
-						page->Reset();
+						// A rescan can potentially find a completely different set of profiles, changes
+						// to user vs. system usage, etc., so we need to mostly act as if we were restarted as
+						// far as what we show in the UI
+						//
+						myMonitor = thisView->monitor;
+						myMonitor->Initialize();
+						MonitorPage * page = myMonitor->GetMonitorPage();
+						if (page) {
+							page->Reset();
+						}
+						thisView->Update();
+						InvalidateRect(thisView->hwnd, NULL, FALSE);
 					}
-					thisView->Update();
-					InvalidateRect(thisView->hwnd, NULL, FALSE);
 				}
 			}
 			break;
 
-#if MOUSEOVER_EFFECTS
 		// WM_SETCURSOR -- we change the cursor when the mouse is over our text
 		//
 		case WM_SETCURSOR:
 			thisView = reinterpret_cast<MonitorSummaryItem *>(static_cast<LONG_PTR>(GetWindowLongPtr(hWnd, DLGWINDOWEXTRA)));
-			if (thisView && thisView->monitor) {
-				POINT cp;
-				GetCursorPos(&cp);
-				GetWindowRect(hWnd, &rect);
-				cp.x -= rect.left;
-				cp.y -= rect.top;
-				r = &thisView->headingRect;
-				if ( cp.x >= r->left && cp.x < r->right && cp.y >= r->top && cp.y < r->bottom ) {
+			if (thisView) {
+				if (thisView->monitor) {
+					POINT cp;
+					GetCursorPos(&cp);
+					GetWindowRect(hWnd, &rect);
+					cp.x -= rect.left;
+					cp.y -= rect.top;
+					r = &thisView->headingRect;
+					if ( cp.x >= r->left && cp.x < r->right && cp.y >= r->top && cp.y < r->bottom ) {
 #if MOUSEOVER_DRAWS_FRAME
-					HFONT hFont;
-					HGDIOBJ oldFont;
-					wchar_t buf[1024];
-					COLORREF highlightColor = RGB(0x00, 0x33, 0x99);	// Vista UI guidelines shade of blue
-					RECT c = *r;
-					int inflaterectAmount = static_cast<int>(INFLATERECT_AMOUNT * dpiScale);
-					InflateRect(&c, inflaterectAmount, inflaterectAmount);
-					wstring s = thisView->monitor->GetDeviceString();
-					StringCbCopy(buf, sizeof(buf), s.c_str());
-					HDC hdc = GetDC(hWnd);
-					HBRUSH hb = CreateSolidBrush(HOT_TRACK_BACKGROUND_TOP);	// hot-track color background
-					HBRUSH oldBrush = (HBRUSH)SelectObject(hdc, hb);
-					HPEN pen = CreatePen(PS_SOLID, 0, HOT_TRACK_FRAME);		// hot-track color frame
-					HPEN oldPen = (HPEN)SelectObject(hdc, pen);
-					RoundRect(hdc, c.left, c.top, c.right, c.bottom, 4, 4);
-					hFont = GetFont(hdc, FC_HEADING);
-					oldFont = SelectObject(hdc, hFont);
-					SetTextColor(hdc, highlightColor);
-					int oldMode = SetBkMode(hdc, TRANSPARENT);
-					DrawText(hdc, buf, -1, &thisView->headingRect, 0);
-					SetBkMode(hdc, oldMode);
-					SelectObject(hdc, oldFont);
-					SelectObject(hdc, oldBrush);
-					DeleteObject(hb);
-					SelectObject(hdc, oldPen);
-					DeleteObject((HGDIOBJ)pen);
-					ReleaseDC(hWnd, hdc);
+						HFONT hFont;
+						HGDIOBJ oldFont;
+						wchar_t buf[1024];
+						COLORREF highlightColor = RGB(0x00, 0x33, 0x99);	// Vista UI guidelines shade of blue
+						RECT c = *r;
+						int inflaterectAmount = static_cast<int>(INFLATERECT_AMOUNT * dpiScale);
+						InflateRect(&c, inflaterectAmount, inflaterectAmount);
+						wstring s = thisView->monitor->GetDeviceString();
+						StringCbCopy(buf, sizeof(buf), s.c_str());
+						HDC hdc = GetDC(hWnd);
+						HBRUSH hb = CreateSolidBrush(HOT_TRACK_BACKGROUND_TOP);	// hot-track color background
+						HBRUSH oldBrush = (HBRUSH)SelectObject(hdc, hb);
+						HPEN pen = CreatePen(PS_SOLID, 0, HOT_TRACK_FRAME);		// hot-track color frame
+						HPEN oldPen = (HPEN)SelectObject(hdc, pen);
+						RoundRect(hdc, c.left, c.top, c.right, c.bottom, 4, 4);
+						hFont = GetFont(hdc, FC_HEADING);
+						oldFont = SelectObject(hdc, hFont);
+						SetTextColor(hdc, highlightColor);
+						int oldMode = SetBkMode(hdc, TRANSPARENT);
+						DrawText(hdc, buf, -1, &thisView->headingRect, 0);
+						SetBkMode(hdc, oldMode);
+						SelectObject(hdc, oldFont);
+						SelectObject(hdc, oldBrush);
+						DeleteObject(hb);
+						SelectObject(hdc, oldPen);
+						DeleteObject((HGDIOBJ)pen);
+						ReleaseDC(hWnd, hdc);
 #endif
-					SetCursor(LoadCursor(NULL, IDC_HAND));
-					SetWindowLongPtrW(hWnd, DWLP_MSGRESULT, TRUE); 
-					return TRUE;
-				}
+						SetCursor(LoadCursor(NULL, IDC_HAND));
+						SetWindowLongPtrW(hWnd, DWLP_MSGRESULT, TRUE); 
+						return TRUE;
+					}
 
-				r = &thisView->activeProfileRect;
-				if ( cp.x >= r->left && cp.x < r->right && cp.y >= r->top && cp.y < r->bottom ) {
+					r = &thisView->activeProfileRect;
+					if ( cp.x >= r->left && cp.x < r->right && cp.y >= r->top && cp.y < r->bottom ) {
 #if MOUSEOVER_DRAWS_FRAME
-					HFONT hFont;
-					HGDIOBJ oldFont;
-					wchar_t buf[1024];
-					COLORREF normalColor    = RGB(0x00, 0x00, 0x00);	// Vista UI guidelines black
-					RECT c = *r;
-					int inflaterectAmount = static_cast<int>(INFLATERECT_AMOUNT * dpiScale);
-					InflateRect(&c, inflaterectAmount, inflaterectAmount);
-					StringCbCopy(buf, sizeof(buf), thisView->activeProfileDisplayText.c_str());
-					HDC hdc = GetDC(hWnd);
-					HBRUSH hb = CreateSolidBrush(HOT_TRACK_BACKGROUND_TOP);	// hot-track color background
-					HBRUSH oldBrush = (HBRUSH)SelectObject(hdc, hb);
-					HPEN pen = CreatePen(PS_SOLID, 0, HOT_TRACK_FRAME);		// hot-track color frame
-					HPEN oldPen = (HPEN)SelectObject(hdc, pen);
-					RoundRect(hdc, c.left, c.top, c.right, c.bottom, 4, 4);
-					hFont = GetFont(hdc, FC_INFORMATION);
-					oldFont = SelectObject(hdc, hFont);
-					SetTextColor(hdc, normalColor);
-					int oldMode = SetBkMode(hdc, TRANSPARENT);
-					DrawText(hdc, buf, -1, &thisView->activeProfileRect, 0);
-					SetBkMode(hdc, oldMode);
-					SelectObject(hdc, oldFont);
-					SelectObject(hdc, oldBrush);
-					DeleteObject(hb);
-					SelectObject(hdc, oldPen);
-					DeleteObject((HGDIOBJ)pen);
-					ReleaseDC(hWnd, hdc);
+						HFONT hFont;
+						HGDIOBJ oldFont;
+						wchar_t buf[1024];
+						COLORREF normalColor    = RGB(0x00, 0x00, 0x00);	// Vista UI guidelines black
+						RECT c = *r;
+						int inflaterectAmount = static_cast<int>(INFLATERECT_AMOUNT * dpiScale);
+						InflateRect(&c, inflaterectAmount, inflaterectAmount);
+						StringCbCopy(buf, sizeof(buf), thisView->activeProfileDisplayText.c_str());
+						HDC hdc = GetDC(hWnd);
+						HBRUSH hb = CreateSolidBrush(HOT_TRACK_BACKGROUND_TOP);	// hot-track color background
+						HBRUSH oldBrush = (HBRUSH)SelectObject(hdc, hb);
+						HPEN pen = CreatePen(PS_SOLID, 0, HOT_TRACK_FRAME);		// hot-track color frame
+						HPEN oldPen = (HPEN)SelectObject(hdc, pen);
+						RoundRect(hdc, c.left, c.top, c.right, c.bottom, 4, 4);
+						hFont = GetFont(hdc, FC_INFORMATION);
+						oldFont = SelectObject(hdc, hFont);
+						SetTextColor(hdc, normalColor);
+						int oldMode = SetBkMode(hdc, TRANSPARENT);
+						DrawText(hdc, buf, -1, &thisView->activeProfileRect, 0);
+						SetBkMode(hdc, oldMode);
+						SelectObject(hdc, oldFont);
+						SelectObject(hdc, oldBrush);
+						DeleteObject(hb);
+						SelectObject(hdc, oldPen);
+						DeleteObject((HGDIOBJ)pen);
+						ReleaseDC(hWnd, hdc);
 #endif
-					SetCursor(LoadCursor(NULL, IDC_HAND));
-					SetWindowLongPtrW(hWnd, DWLP_MSGRESULT, TRUE); 
-					return TRUE;
+						SetCursor(LoadCursor(NULL, IDC_HAND));
+						SetWindowLongPtrW(hWnd, DWLP_MSGRESULT, TRUE); 
+						return TRUE;
+					}
 				}
 			}
 			break;
-#endif
 
 		case WM_LBUTTONDOWN:
 			thisView = reinterpret_cast<MonitorSummaryItem *>(static_cast<LONG_PTR>(GetWindowLongPtr(hWnd, DLGWINDOWEXTRA)));
-			if (thisView && thisView->monitor) {
-				int xPos;
-				int yPos;				
-				xPos = static_cast<signed short>(LOWORD(lParam));
-				yPos = static_cast<signed short>(HIWORD(lParam));
-				GetWindowRect(hWnd, &rect);
-				r = &thisView->headingRect;
-				if ( xPos >= r->left && xPos < r->right && yPos >= r->top && yPos < r->bottom ) {
-					thisView->lutViewShowsProfile = false;
-					thisView->Update();
-					break;
-				}
-				r = &thisView->activeProfileRect;
-				if ( xPos >= r->left && xPos < r->right && yPos >= r->top && yPos < r->bottom ) {
-					thisView->lutViewShowsProfile = true;
-					thisView->Update();
-					break;
+			if (thisView) {
+				if (thisView->monitor) {
+					int xPos;
+					int yPos;				
+					xPos = static_cast<signed short>(LOWORD(lParam));
+					yPos = static_cast<signed short>(HIWORD(lParam));
+					GetWindowRect(hWnd, &rect);
+					r = &thisView->headingRect;
+					if ( xPos >= r->left && xPos < r->right && yPos >= r->top && yPos < r->bottom ) {
+						thisView->lutViewShowsProfile = false;
+						thisView->Update();
+						break;
+					}
+					r = &thisView->activeProfileRect;
+					if ( xPos >= r->left && xPos < r->right && yPos >= r->top && yPos < r->bottom ) {
+						thisView->lutViewShowsProfile = true;
+						thisView->Update();
+						break;
+					}
 				}
 			}
 			break;
@@ -384,10 +387,16 @@ HWND MonitorSummaryItem::CreateMonitorSummaryItemWindow(
 		buttonRect.top = width - buttonRect.right;
 		buttonRect.bottom = buttonRect.top + baseButtonRect.bottom - baseButtonRect.top;
 
+		wchar_t * buttonText = L"Set linear";
+		if (activeProfile) {
+			if (activeProfile->GetLutPointer()) {
+				buttonText = L"Load LUT";
+			}
+		}
 		hwndLoadLutButton = CreateWindowEx(
 				WS_EX_NOPARENTNOTIFY,
 				L"Button",
-				(activeProfile && activeProfile->GetLutPointer()) ? L"Load LUT" : L"Set linear",
+				buttonText,
 				WS_CHILD | WS_GROUP | WS_VISIBLE | WS_TABSTOP,
 				buttonRect.left,
 				buttonRect.top,
@@ -398,19 +407,6 @@ HWND MonitorSummaryItem::CreateMonitorSummaryItemWindow(
 				g_hInst,
 				this );
 		SetWindowLongPtr(hwndLoadLutButton, GWLP_ID, IDC_LOAD_BUTTON);
-
-#if 0
-//#ifndef BCM_FIRST
-//#define BCM_FIRST               0x1600      // Button control messages
-//#endif
-
-#ifndef BCM_SETSHIELD
-// Macro to use on a button or command link to display an elevated icon
-#define BCM_SETSHIELD            (BCM_FIRST + 0x000C)
-#endif
-
-		SendMessage(hwndLoadLutButton, BCM_SETSHIELD, 0, TRUE);
-#endif
 
 		HDC hdc = GetDC(hwndLoadLutButton);
 		HFONT hFont = GetFont(hdc, FC_DIALOG, true);
@@ -464,11 +460,17 @@ void MonitorSummaryItem::Update(void) {
 		summaryLutView->SetLUT(monitor->GetLutPointer());
 	}
 	summaryLutView->SetUpdateBitmap();
+	wchar_t * buttonText = L"Set linear";
+	if (activeProfile) {
+		if (activeProfile->GetLutPointer()) {
+			buttonText = L"Load LUT";
+		}
+	}
 	SendMessage(
 			hwndLoadLutButton,
 			WM_SETTEXT,
 			0,
-			reinterpret_cast<LPARAM>( (activeProfile && activeProfile->GetLutPointer()) ? L"Load LUT" : L"Set linear" )
+			reinterpret_cast<LPARAM>( buttonText )
 	);
 	InvalidateRect(hwndSummaryLUT, summaryLutView->GetGraphRect(), FALSE);
 }

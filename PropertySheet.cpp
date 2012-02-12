@@ -576,14 +576,14 @@ int CALLBACK PropSheetCallback(HWND hWnd, UINT uMsg, LPARAM lParam) {
 				anchorPreset.anchorRight = true;
 				anchorPreset.anchorBottom = true;
 				Resize::AddAchorPreset(anchorPreset);
-			}
 
-			// Change the font on the tab control
-			//
-			HDC hdc = GetDC(hWnd);
-			HFONT hFont = GetFont(hdc, FC_DIALOG, true);
-			ReleaseDC(hWnd, hdc);
-			SendMessage(tabControl, WM_SETFONT, (WPARAM)hFont, TRUE);
+				// Change the font on the tab control
+				//
+				HDC hdc = GetDC(hWnd);
+				HFONT hFont = GetFont(hdc, FC_DIALOG, true);
+				ReleaseDC(hWnd, hdc);
+				SendMessage(tabControl, WM_SETFONT, (WPARAM)hFont, TRUE);
+			}
 
 			// Subclass the property sheet
 			//

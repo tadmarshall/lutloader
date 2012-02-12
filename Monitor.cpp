@@ -165,6 +165,14 @@ bool Monitor::SetDefaultUserProfile(Profile * profile) {
 	StringCbCat(registryKey, sizeof(registryKey), &DeviceKey.c_str()[len]);
 	bool success = profile->EditRegistryProfileList(HKEY_CURRENT_USER, registryKey, true);
 	if (success) {
+		ProfileList::iterator itEnd = UserProfileList.end();
+		for (ProfileList::iterator it = UserProfileList.begin(); it != itEnd; ++it) {
+			if ( *it == profile ) {
+				UserProfileList.erase(it);
+				break;
+			}
+		}
+		UserProfileList.push_back(profile);
 		UserProfile = profile;
 	}
 	return success;
@@ -176,6 +184,14 @@ bool Monitor::SetDefaultSystemProfile(Profile * profile) {
 	StringCbCopy(registryKey, sizeof(registryKey), &DeviceKey.c_str()[len]);
 	bool success = profile->EditRegistryProfileList(HKEY_LOCAL_MACHINE, registryKey, true);
 	if (success) {
+		ProfileList::iterator itEnd = SystemProfileList.end();
+		for (ProfileList::iterator it = SystemProfileList.begin(); it != itEnd; ++it) {
+			if ( *it == profile ) {
+				SystemProfileList.erase(it);
+				break;
+			}
+		}
+		SystemProfileList.push_back(profile);
 		SystemProfile = profile;
 	}
 	return success;

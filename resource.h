@@ -2,6 +2,13 @@
 // Microsoft Visual C++ generated include file.
 // Used by LUTloader.rc
 //
+#include "buildnumber.h"
+#define LUT_LOADER_MAJOR_VERSION        1
+#define LUT_LOADER_MINOR_VERSION        0
+#define LUT_LOADER_BUILD_NUMBER         BUILDNUMBER
+#define LUT_LOADER_REVISION_NUMBER      0
+#define LUT_LOADER_BUILD_TAG            alpha
+#define LUT_LOADER_VERSION_STRING       "1.0.1.0 alpha 1"
 #define IDS_CAPTION                     101
 #define IDS_NO_MONITORS_FOUND           102
 #define IDS_PROPSHEET_FAILURE           103
