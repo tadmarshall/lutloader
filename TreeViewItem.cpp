@@ -8,6 +8,7 @@
 #include "resource.h"
 #include "TreeViewItem.h"
 //#include "Utility.h"
+#include <banned.h>
 
 // Symbols defined in other files
 //
@@ -73,16 +74,6 @@ void TreeViewItem::Handle_TVN_SELCHANGEDW(MonitorPage * monitorPage, NMTREEVIEWW
 }
 
 void TreeViewItem::Handle_WM_CONTEXTMENU(MonitorPage * monitorPage, POINT * screenClickPoint) {
-	int flags;
-	HMENU hMenu = 0;
-	HMENU hPopup = 0;
-	MENUINFO menuInfo;
-	MENUITEMINFO menuItemInfo;
-	int id;
-	wstring s;
-	LUT * pProfileLUT;
-	Monitor * monitor;
-	MonitorSummaryItem * monitorSummaryItem;
 
 	switch (ItemType) {
 		case TREEVIEW_ITEM_TYPE_NONE:
@@ -90,43 +81,6 @@ void TreeViewItem::Handle_WM_CONTEXTMENU(MonitorPage * monitorPage, POINT * scre
 			break;
 
 		case TREEVIEW_ITEM_TYPE_MONITOR:
-			hMenu = LoadMenu(g_hInst, MAKEINTRESOURCE(IDR_LUTVIEW_POPUP_MENU));
-			hPopup = GetSubMenu(hMenu, 0);
-			CheckMenuRadioItem(
-					hPopup,
-					ID_WHITEBACKGROUND,
-					ID_GRADIENTBACKGROUND,
-					ID_WHITEBACKGROUND + 0,
-					MF_BYCOMMAND );
-
-			SecureZeroMemory(&menuInfo, sizeof(menuInfo));
-			menuInfo.cbSize = sizeof(menuInfo);
-			menuInfo.fMask = MIM_BACKGROUND;
-			menuInfo.hbrBack = (HBRUSH)GetStockObject(WHITE_BRUSH);
-			//menuInfo.hbrBack = CreateSolidBrush(RGB(235,243,253));
-			SetMenuInfo(hPopup, &menuInfo);
-
-			//EnableMenuItem(hPopup, 1, MF_BYPOSITION | MF_DISABLED);
-
-			//SetMenuDefaultItem(hPopup, 1, TRUE);
-
-			flags = TPM_LEFTALIGN | TPM_TOPALIGN | TPM_NONOTIFY | TPM_RETURNCMD | TPM_RIGHTBUTTON | TPM_NOANIMATION;
-			id = TrackPopupMenuEx(hPopup, flags, screenClickPoint->x, screenClickPoint->y, monitorPage->GetHWND(), NULL);
-			if ( id >= ID_WHITEBACKGROUND && id <= ID_GRADIENTBACKGROUND ) {
-				switch (id) {
-					case ID_WHITEBACKGROUND:
-						s = L"User chose white background";
-						break;
-					case ID_BLACKBACKGROUND:
-						s = L"User chose black background";
-						break;
-					case ID_GRADIENTBACKGROUND:
-						s = L"User chose gradient background";
-						break;
-				}
-				monitorPage->SetEditControlText(s);
-			}
-			DestroyMenu(hMenu);
 			break;
 
 		case TREEVIEW_ITEM_TYPE_USER_PROFILES:
@@ -139,97 +93,125 @@ void TreeViewItem::Handle_WM_CONTEXTMENU(MonitorPage * monitorPage, POINT * scre
 			break;
 
 		case TREEVIEW_ITEM_TYPE_USER_PROFILE:
-			hPopup = CreatePopupMenu();
-
-			SecureZeroMemory(&menuInfo, sizeof(menuInfo));
-			menuInfo.cbSize = sizeof(menuInfo);
-			menuInfo.fMask = MIM_BACKGROUND;
-			menuInfo.hbrBack = (HBRUSH)GetStockObject(WHITE_BRUSH);
-			SetMenuInfo(hPopup, &menuInfo);
-
-			SecureZeroMemory(&menuItemInfo, sizeof(menuItemInfo));
-			menuItemInfo.cbSize = sizeof(menuItemInfo);
-			menuItemInfo.fMask = MIIM_STRING | MIIM_ID;
-			monitor = monitorPage->GetMonitor();
-			if (monitor->GetActiveProfileIsUserProfile()) {
-				menuItemInfo.dwTypeData = L"Set as default profile";
-			} else {
-				menuItemInfo.dwTypeData = L"Set as default user profile (inactive)";
-			}
-			menuItemInfo.wID = 17;
-			InsertMenuItem(hPopup, 0, TRUE, &menuItemInfo);
-
-			//menuItemInfo.dwTypeData = L"Remove association";
-			//InsertMenuItem(hPopup, 1, TRUE, &menuItemInfo);
-
-			flags = TPM_LEFTALIGN | TPM_TOPALIGN | TPM_NONOTIFY | TPM_RETURNCMD | TPM_RIGHTBUTTON | TPM_NOANIMATION;
-			id = TrackPopupMenuEx(hPopup, flags, screenClickPoint->x, screenClickPoint->y, monitorPage->GetHWND(), NULL);
-
-			if ( 17 == id ) {
-				wstring errorString;
-				ProfilePtr->LoadFullProfile(false);
-				monitor->SetDefaultProfile(ProfilePtr, true, errorString);
-				if (monitor->GetActiveProfileIsUserProfile()) {
-					pProfileLUT = ProfilePtr->GetLutPointer();
-					if ( pProfileLUT ) {
-						monitor->WriteLutToCard(pProfileLUT);
-						monitor->ReadLutFromCard();
-					}
-					monitorSummaryItem = monitor->GetMonitorSummaryItem();
-					if (monitorSummaryItem) {
-						monitorSummaryItem->Update();
-					}
-				}
-			}
-
-			DestroyMenu(hPopup);
+			ProfileContextMenu(monitorPage, screenClickPoint, true);
 			break;
 
 		case TREEVIEW_ITEM_TYPE_SYSTEM_PROFILE:
-			hPopup = CreatePopupMenu();
-
-			SecureZeroMemory(&menuInfo, sizeof(menuInfo));
-			menuInfo.cbSize = sizeof(menuInfo);
-			menuInfo.fMask = MIM_BACKGROUND;
-			menuInfo.hbrBack = (HBRUSH)GetStockObject(WHITE_BRUSH);
-			SetMenuInfo(hPopup, &menuInfo);
-
-			SecureZeroMemory(&menuItemInfo, sizeof(menuItemInfo));
-			menuItemInfo.cbSize = sizeof(menuItemInfo);
-			menuItemInfo.fMask = MIIM_STRING | MIIM_ID;
-			monitor = monitorPage->GetMonitor();
-			if (monitor->GetActiveProfileIsUserProfile()) {
-				menuItemInfo.dwTypeData = L"Set as default system profile (inactive)";
-			} else {
-				menuItemInfo.dwTypeData = L"Set as default profile";
-			}
-			menuItemInfo.wID = 17;
-			InsertMenuItem(hPopup, 0, TRUE, &menuItemInfo);
-
-			//menuItemInfo.dwTypeData = L"Remove association";
-			//InsertMenuItem(hPopup, 1, TRUE, &menuItemInfo);
-
-			flags = TPM_LEFTALIGN | TPM_TOPALIGN | TPM_NONOTIFY | TPM_RETURNCMD | TPM_RIGHTBUTTON | TPM_NOANIMATION;
-			id = TrackPopupMenuEx(hPopup, flags, screenClickPoint->x, screenClickPoint->y, monitorPage->GetHWND(), NULL);
-
-			if ( 17 == id ) {
-				wstring errorString;
-				ProfilePtr->LoadFullProfile(false);
-				monitor->SetDefaultProfile(ProfilePtr, false, errorString);
-				if ( false == monitor->GetActiveProfileIsUserProfile() ) {
-					pProfileLUT = ProfilePtr->GetLutPointer();
-					if ( pProfileLUT ) {
-						monitor->WriteLutToCard(pProfileLUT);
-						monitor->ReadLutFromCard();
-					}
-					monitorSummaryItem = monitor->GetMonitorSummaryItem();
-					if (monitorSummaryItem) {
-						monitorSummaryItem->Update();
-					}
-				}
-			}
-
-			DestroyMenu(hPopup);
+			ProfileContextMenu(monitorPage, screenClickPoint, false);
 			break;
 	}
+}
+
+void TreeViewItem::ProfileContextMenu(MonitorPage * monitorPage, POINT * screenClickPoint, bool isUser) {
+	int flags;
+	HMENU hPopup;
+	MENUINFO menuInfo;
+	MENUITEMINFO menuItemInfo;
+	int id;
+	LUT * pProfileLUT;
+	Monitor * monitor;
+	MonitorSummaryItem * monitorSummaryItem;
+	Profile * profile;
+	Profile * userProfile;
+	Profile * systemProfile;
+
+	hPopup = CreatePopupMenu();
+
+	SecureZeroMemory(&menuInfo, sizeof(menuInfo));
+	menuInfo.cbSize = sizeof(menuInfo);
+	menuInfo.fMask = MIM_BACKGROUND;
+	menuInfo.hbrBack = (HBRUSH)GetStockObject(WHITE_BRUSH);
+	SetMenuInfo(hPopup, &menuInfo);
+
+	SecureZeroMemory(&menuItemInfo, sizeof(menuItemInfo));
+	menuItemInfo.cbSize = sizeof(menuItemInfo);
+	monitor = monitorPage->GetMonitor();
+	userProfile = monitor->GetUserProfile();
+	systemProfile = monitor->GetSystemProfile();
+	profile = isUser ? userProfile : systemProfile;
+	if ( isUser == monitor->GetActiveProfileIsUserProfile() ) {
+		menuItemInfo.dwTypeData = L"Set as default profile";
+	} else {
+		menuItemInfo.dwTypeData = isUser ? L"Set as default user profile (inactive)" : L"Set as default system profile (inactive)";
+	}
+	if ( (isUser && (ProfilePtr == userProfile)) || (!isUser && (ProfilePtr == systemProfile)) ) {
+		menuItemInfo.fMask = MIIM_STRING | MIIM_ID | MIIM_STATE;
+		menuItemInfo.fState = MFS_DISABLED | MFS_CHECKED;
+	} else {
+		menuItemInfo.fMask = MIIM_STRING | MIIM_ID;
+	}
+	menuItemInfo.wID = ID_SET_DEFAULT_PROFILE;
+	InsertMenuItem(hPopup, 0, TRUE, &menuItemInfo);
+
+	//menuItemInfo.dwTypeData = L"Remove association";
+	//InsertMenuItem(hPopup, 1, TRUE, &menuItemInfo);
+
+	flags = TPM_LEFTALIGN | TPM_TOPALIGN | TPM_NONOTIFY | TPM_RETURNCMD | TPM_RIGHTBUTTON | TPM_NOANIMATION;
+	id = TrackPopupMenuEx(hPopup, flags, screenClickPoint->x, screenClickPoint->y, monitorPage->GetHwnd(), NULL);
+
+	if ( ID_SET_DEFAULT_PROFILE == id ) {
+		wstring errorString;
+		ProfilePtr->LoadFullProfile(false);
+		monitor->SetDefaultProfile(ProfilePtr, isUser, errorString);
+		if ( isUser == monitor->GetActiveProfileIsUserProfile() ) {
+			pProfileLUT = ProfilePtr->GetLutPointer();
+			if ( pProfileLUT ) {
+				monitor->WriteLutToCard(pProfileLUT);
+			} else {
+				LUT * pLUT = new LUT;
+				GetSignedLUT(pLUT);
+				monitor->WriteLutToCard(pLUT);
+				delete pLUT;
+			}
+			monitor->ReadLutFromCard();
+			monitorSummaryItem = monitor->GetMonitorSummaryItem();
+			if (monitorSummaryItem) {
+				monitorSummaryItem->Update();
+			}
+		}
+
+		// Unbold the currently bold item, make ourselves bold
+		//
+		HWND hwndTreeView = monitorPage->GetTreeViewHwnd();
+		HTREEITEM hParent = reinterpret_cast<HTREEITEM>(
+				SendMessage(
+						hwndTreeView,
+						TVM_GETNEXTITEM,
+						TVGN_PARENT,
+						reinterpret_cast<LPARAM>(hTreeItem) ) );
+		HTREEITEM hChild = reinterpret_cast<HTREEITEM>(
+				SendMessage(
+						hwndTreeView,
+						TVM_GETNEXTITEM,
+						TVGN_CHILD,
+						reinterpret_cast<LPARAM>(hParent) ) );
+		TVITEMEX itemEx;
+		SecureZeroMemory(&itemEx, sizeof(itemEx));
+		itemEx.mask = TVIF_HANDLE | TVIF_STATE;
+		while (hChild) {
+			if ( hChild != hTreeItem ) {
+				itemEx.hItem = hChild;
+				itemEx.state = TVIS_BOLD;
+				itemEx.stateMask = TVIS_BOLD;
+				SendMessage(hwndTreeView, TVM_GETITEM, 0, reinterpret_cast<LPARAM>(&itemEx));
+				if ( 0 != (itemEx.state & TVIS_BOLD) ) {
+					itemEx.state = 0;
+					itemEx.stateMask = TVIS_BOLD;
+					SendMessage(hwndTreeView, TVM_SETITEM, 0, reinterpret_cast<LPARAM>(&itemEx));
+				}
+			}
+			hChild = reinterpret_cast<HTREEITEM>(
+					SendMessage(
+							hwndTreeView,
+							TVM_GETNEXTITEM,
+							TVGN_NEXT,
+							reinterpret_cast<LPARAM>(hChild) ) );
+		}
+		itemEx.hItem = hTreeItem;
+		itemEx.state = TVIS_BOLD;
+		itemEx.stateMask = TVIS_BOLD;
+		SendMessage(hwndTreeView, TVM_SETITEM, 0, reinterpret_cast<LPARAM>(&itemEx));
+		SendMessage(hwndTreeView, TVM_SELECTITEM, TVGN_CARET, reinterpret_cast<LPARAM>(hTreeItem));
+	}
+	DestroyMenu(hPopup);
 }

@@ -13,7 +13,8 @@ typedef struct tagNAME_LOOKUP
 typedef enum tag_FONT_CLASS {
 	FC_HEADING = 0,
 	FC_FILENAME = 1,
-	FC_INFORMATION = 2
+	FC_INFORMATION = 2,
+	FC_DIALOG = 3
 } FONT_CLASS;
 
 wstring HexDump(const LPBYTE data, size_t size, size_t rowWidth);

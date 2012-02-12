@@ -33,6 +33,8 @@ private:
 
 	Monitor *			monitor;
 	HWND				hwnd;
+	HWND				hwndLoadLutButton;
+	HWND				hwndRescanButton;
 	RECT				headingRect;
 	RECT				activeProfileRect;
 	RECT				lutStatusRect;

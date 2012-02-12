@@ -11,6 +11,7 @@
 #include "Utility.h"
 #include "resource.h"
 #include <strsafe.h>
+#include <banned.h>
 
 // Global externs defined in this file
 //
@@ -29,7 +30,9 @@ extern double dpiScale;								// Scaling factor for dots per inch (actual versu
 //
 MonitorPage::MonitorPage(Monitor * hostMonitor) :
 		monitor(hostMonitor),
-		savedHWND(0),
+		hwnd(0),
+		hwndTreeView(0),
+		hwndEdit(0),
 		tvRoot(0),
 		tvUserProfiles(0),
 		tvSystemProfiles(0),
@@ -44,11 +47,15 @@ MonitorPage::~MonitorPage() {
 }
 
 void MonitorPage::SetEditControlText(wstring newText) {
-	SetDlgItemText(savedHWND, IDC_MONITOR_TEXT, newText.c_str());
+	SetDlgItemText(hwnd, IDC_MONITOR_TEXT, newText.c_str());
 }
 
-HWND MonitorPage::GetHWND(void) const {
-	return savedHWND;
+HWND MonitorPage::GetHwnd(void) const {
+	return hwnd;
+}
+
+HWND MonitorPage::GetTreeViewHwnd(void) const {
+	return hwndTreeView;
 }
 
 Monitor * MonitorPage::GetMonitor(void) const {
@@ -59,15 +66,15 @@ Monitor * MonitorPage::GetMonitor(void) const {
 // assuming that we have had our WM_INITDIALOG call and so have something to reset
 //
 void MonitorPage::Reset(void) {
-	if (savedHWND) {
+	if (hwnd) {
 		resetting = true;
 		tvUserProfiles = 0;
 		tvSystemProfiles = 0;
-		HWND treeControlHwnd = GetDlgItem(savedHWND, IDC_TREE1);
+		HWND treeControlHwnd = GetDlgItem(hwnd, IDC_TREE1);
 		SendMessage(treeControlHwnd, TVM_DELETEITEM, 0, reinterpret_cast<LPARAM>(TVI_ROOT));
 		ClearTreeViewItemList(false);
 		resetting = false;
-		BuildTreeView(treeControlHwnd);
+		BuildTreeView();
 	}
 }
 
@@ -94,7 +101,7 @@ void MonitorPage::ClearTreeViewItemList(bool freeAllMemory) {
 
 // Build the TreeView
 //
-void MonitorPage::BuildTreeView(HWND treeControlHwnd) {
+void MonitorPage::BuildTreeView(void) {
 
 	ProfileList profileList;
 	HTREEITEM tvItem;
@@ -108,7 +115,7 @@ void MonitorPage::BuildTreeView(HWND treeControlHwnd) {
 #ifndef TVS_EX_DOUBLEBUFFER
 #define TVS_EX_DOUBLEBUFFER         0x0004
 #endif
-		SendMessage(treeControlHwnd, TVM_SETEXTENDEDSTYLE, TVS_EX_DOUBLEBUFFER, TVS_EX_DOUBLEBUFFER);
+		SendMessage(hwndTreeView, TVM_SETEXTENDEDSTYLE, TVS_EX_DOUBLEBUFFER, TVS_EX_DOUBLEBUFFER);
 	}
 
 	TVINSERTSTRUCT tvInsertStruct;
@@ -121,7 +128,7 @@ void MonitorPage::BuildTreeView(HWND treeControlHwnd) {
 	tvInsertStruct.itemex.pszText = buf;
 	tiObject = AddTreeViewItem(new TreeViewItem(TREEVIEW_ITEM_TYPE_MONITOR, tvInsertStruct.itemex.pszText)); 
 	tvInsertStruct.itemex.lParam = reinterpret_cast<LPARAM>(tiObject);
-	tvRoot = reinterpret_cast<HTREEITEM>( SendMessage(treeControlHwnd, TVM_INSERTITEM, 0, reinterpret_cast<LPARAM>(&tvInsertStruct)) );
+	tvRoot = reinterpret_cast<HTREEITEM>( SendMessage(hwndTreeView, TVM_INSERTITEM, 0, reinterpret_cast<LPARAM>(&tvInsertStruct)) );
 	tiObject->SetHTREEITEM(tvRoot);
 	tiObject->SetMonitor(monitor);
 
@@ -138,7 +145,7 @@ void MonitorPage::BuildTreeView(HWND treeControlHwnd) {
 		tvInsertStruct.itemex.pszText = L"User profiles";
 		tiObject = AddTreeViewItem(new TreeViewItem(TREEVIEW_ITEM_TYPE_USER_PROFILES, tvInsertStruct.itemex.pszText)); 
 		tvInsertStruct.itemex.lParam = reinterpret_cast<LPARAM>(tiObject);
-		tvUserProfiles = reinterpret_cast<HTREEITEM>( SendMessage(treeControlHwnd, TVM_INSERTITEM, 0, reinterpret_cast<LPARAM>(&tvInsertStruct)) );
+		tvUserProfiles = reinterpret_cast<HTREEITEM>( SendMessage(hwndTreeView, TVM_INSERTITEM, 0, reinterpret_cast<LPARAM>(&tvInsertStruct)) );
 		tiObject->SetHTREEITEM(tvUserProfiles);
 		tvInsertStruct.itemex.mask = TVIF_TEXT | TVIF_PARAM;
 
@@ -153,12 +160,12 @@ void MonitorPage::BuildTreeView(HWND treeControlHwnd) {
 			tvInsertStruct.itemex.pszText = buf;
 			tiObject = AddTreeViewItem(new TreeViewItem(TREEVIEW_ITEM_TYPE_USER_PROFILE, tvInsertStruct.itemex.pszText)); 
 			tvInsertStruct.itemex.lParam = reinterpret_cast<LPARAM>(tiObject);
-			tvItem = reinterpret_cast<HTREEITEM>( SendMessage(treeControlHwnd, TVM_INSERTITEM, 0, reinterpret_cast<LPARAM>(&tvInsertStruct)) );
+			tvItem = reinterpret_cast<HTREEITEM>( SendMessage(hwndTreeView, TVM_INSERTITEM, 0, reinterpret_cast<LPARAM>(&tvInsertStruct)) );
 			tiObject->SetHTREEITEM(tvItem);
 			tiObject->SetProfile(profileList[i]);
 			tvInsertStruct.itemex.mask = TVIF_TEXT | TVIF_PARAM;
 		}
-		SendMessage(treeControlHwnd, TVM_SORTCHILDREN, FALSE, reinterpret_cast<LPARAM>(tvUserProfiles));
+		SendMessage(hwndTreeView, TVM_SORTCHILDREN, FALSE, reinterpret_cast<LPARAM>(tvUserProfiles));
 
 		tvInsertStruct.hParent = tvRoot;
 		if (!hiliteUser) {
@@ -167,7 +174,7 @@ void MonitorPage::BuildTreeView(HWND treeControlHwnd) {
 		tvInsertStruct.itemex.pszText = L"System profiles";
 		tiObject = AddTreeViewItem(new TreeViewItem(TREEVIEW_ITEM_TYPE_SYSTEM_PROFILES, tvInsertStruct.itemex.pszText)); 
 		tvInsertStruct.itemex.lParam = reinterpret_cast<LPARAM>(tiObject);
-		tvSystemProfiles = reinterpret_cast<HTREEITEM>( SendMessage(treeControlHwnd, TVM_INSERTITEM, 0, reinterpret_cast<LPARAM>(&tvInsertStruct)) );
+		tvSystemProfiles = reinterpret_cast<HTREEITEM>( SendMessage(hwndTreeView, TVM_INSERTITEM, 0, reinterpret_cast<LPARAM>(&tvInsertStruct)) );
 		tiObject->SetHTREEITEM(tvSystemProfiles);
 		tvInsertStruct.itemex.mask = TVIF_TEXT | TVIF_PARAM;
 
@@ -182,12 +189,12 @@ void MonitorPage::BuildTreeView(HWND treeControlHwnd) {
 			tvInsertStruct.itemex.pszText = buf;
 			tiObject = AddTreeViewItem(new TreeViewItem(TREEVIEW_ITEM_TYPE_SYSTEM_PROFILE, tvInsertStruct.itemex.pszText)); 
 			tvInsertStruct.itemex.lParam = reinterpret_cast<LPARAM>(tiObject);
-			tvItem = reinterpret_cast<HTREEITEM>( SendMessage(treeControlHwnd, TVM_INSERTITEM, 0, reinterpret_cast<LPARAM>(&tvInsertStruct)) );
+			tvItem = reinterpret_cast<HTREEITEM>( SendMessage(hwndTreeView, TVM_INSERTITEM, 0, reinterpret_cast<LPARAM>(&tvInsertStruct)) );
 			tiObject->SetHTREEITEM(tvItem);
 			tiObject->SetProfile(profileList[i]);
 			tvInsertStruct.itemex.mask = TVIF_TEXT | TVIF_PARAM;
 		}
-		SendMessage(treeControlHwnd, TVM_SORTCHILDREN, FALSE, reinterpret_cast<LPARAM>(tvSystemProfiles));
+		SendMessage(hwndTreeView, TVM_SORTCHILDREN, FALSE, reinterpret_cast<LPARAM>(tvSystemProfiles));
 
 	} else {
 
@@ -197,7 +204,7 @@ void MonitorPage::BuildTreeView(HWND treeControlHwnd) {
 		tvInsertStruct.itemex.pszText = L"Profiles";
 		tiObject = AddTreeViewItem(new TreeViewItem(TREEVIEW_ITEM_TYPE_PROFILES, tvInsertStruct.itemex.pszText)); 
 		tvInsertStruct.itemex.lParam = reinterpret_cast<LPARAM>(tiObject);
-		tvSystemProfiles = reinterpret_cast<HTREEITEM>( SendMessage(treeControlHwnd, TVM_INSERTITEM, 0, reinterpret_cast<LPARAM>(&tvInsertStruct)) );
+		tvSystemProfiles = reinterpret_cast<HTREEITEM>( SendMessage(hwndTreeView, TVM_INSERTITEM, 0, reinterpret_cast<LPARAM>(&tvInsertStruct)) );
 		tiObject->SetHTREEITEM(tvSystemProfiles);
 
 		profileList = monitor->GetProfileList(false);
@@ -211,14 +218,14 @@ void MonitorPage::BuildTreeView(HWND treeControlHwnd) {
 			tvInsertStruct.itemex.pszText = buf;
 			tiObject = AddTreeViewItem(new TreeViewItem(TREEVIEW_ITEM_TYPE_SYSTEM_PROFILE, tvInsertStruct.itemex.pszText)); 
 			tvInsertStruct.itemex.lParam = reinterpret_cast<LPARAM>(tiObject);
-			tvItem = reinterpret_cast<HTREEITEM>( SendMessage(treeControlHwnd, TVM_INSERTITEM, 0, reinterpret_cast<LPARAM>(&tvInsertStruct)) );
+			tvItem = reinterpret_cast<HTREEITEM>( SendMessage(hwndTreeView, TVM_INSERTITEM, 0, reinterpret_cast<LPARAM>(&tvInsertStruct)) );
 			tiObject->SetHTREEITEM(tvItem);
 			tiObject->SetProfile(profileList[i]);
 			tvInsertStruct.itemex.mask = TVIF_TEXT | TVIF_PARAM;
 		}
-		SendMessage(treeControlHwnd, TVM_SORTCHILDREN, FALSE, reinterpret_cast<LPARAM>(tvSystemProfiles));
+		SendMessage(hwndTreeView, TVM_SORTCHILDREN, FALSE, reinterpret_cast<LPARAM>(tvSystemProfiles));
 	}
-	SendMessage(treeControlHwnd, TVM_EXPAND, TVE_EXPAND, reinterpret_cast<LPARAM>(tvRoot));
+	SendMessage(hwndTreeView, TVM_EXPAND, TVE_EXPAND, reinterpret_cast<LPARAM>(tvRoot));
 }
 
 // Subclass procedure for edit control
@@ -258,8 +265,6 @@ INT_PTR CALLBACK MonitorPage::MonitorPageProc(HWND hWnd, UINT uMessage, WPARAM w
 
 	MonitorPage * thisPage;
 	PROPSHEETPAGE * psp;
-	HWND treeControlHwnd;
-	HWND editControlHwnd;
 	WINDOWINFO wiParent;
 	RECT tvRect;
 	RECT edRect;
@@ -279,12 +284,13 @@ INT_PTR CALLBACK MonitorPage::MonitorPageProc(HWND hWnd, UINT uMessage, WPARAM w
 
 			// Save some things in our object
 			//
-			thisPage->savedHWND = hWnd;
+			thisPage->hwnd = hWnd;
+			thisPage->hwndTreeView = GetDlgItem(hWnd, IDC_TREE1);
+			thisPage->hwndEdit = GetDlgItem(hWnd, IDC_MONITOR_TEXT);
 
 			// Subclass the edit control
 			//
-			editControlHwnd = GetDlgItem(hWnd, IDC_MONITOR_TEXT);
-			oldEditWindowProc = (WNDPROC)(INT_PTR)SetWindowLongPtr(editControlHwnd, GWLP_WNDPROC, (__int3264)(LONG_PTR)EditSubclassProc);
+			oldEditWindowProc = (WNDPROC)(INT_PTR)SetWindowLongPtr(thisPage->hwndEdit, GWLP_WNDPROC, (__int3264)(LONG_PTR)EditSubclassProc);
 
 			// This page and its subwindows should grow with resizing
 			//
@@ -296,11 +302,10 @@ INT_PTR CALLBACK MonitorPage::MonitorPageProc(HWND hWnd, UINT uMessage, WPARAM w
 			anchorPreset.anchorBottom = true;
 			Resize::AddAchorPreset(anchorPreset);
 
-			anchorPreset.hwnd = editControlHwnd;
+			anchorPreset.hwnd = thisPage->hwndEdit;
 			Resize::AddAchorPreset(anchorPreset);
 
-			treeControlHwnd = GetDlgItem(hWnd, IDC_TREE1);
-			anchorPreset.hwnd = treeControlHwnd;
+			anchorPreset.hwnd = thisPage->hwndTreeView;
 			anchorPreset.anchorRight = false;
 			Resize::AddAchorPreset(anchorPreset);
 
@@ -321,42 +326,42 @@ INT_PTR CALLBACK MonitorPage::MonitorPageProc(HWND hWnd, UINT uMessage, WPARAM w
 				wiParent.cbSize = sizeof(wiParent);
 				GetWindowInfo(hWnd, &wiParent);
 
-				GetWindowRect(editControlHwnd, &rect);
+				GetWindowRect(thisPage->hwndEdit, &rect);
 				rect.left -= wiParent.rcClient.left;
 				rect.top -= wiParent.rcClient.top;
 				rect.right -= wiParent.rcClient.left;
 				rect.bottom -= wiParent.rcClient.top;
 				rect.right += sizeDelta.cx;
 				rect.bottom += sizeDelta.cy;
-				MoveWindow(editControlHwnd, rect.left, rect.top, rect.right - rect.left, rect.bottom - rect.top, FALSE);
+				MoveWindow(thisPage->hwndEdit, rect.left, rect.top, rect.right - rect.left, rect.bottom - rect.top, FALSE);
 
-				GetWindowRect(treeControlHwnd, &rect);
+				GetWindowRect(thisPage->hwndTreeView, &rect);
 				rect.left -= wiParent.rcClient.left;
 				rect.top -= wiParent.rcClient.top;
 				rect.right -= wiParent.rcClient.left;
 				rect.bottom -= wiParent.rcClient.top;
 				rect.bottom += sizeDelta.cy;
-				MoveWindow(treeControlHwnd, rect.left, rect.top, rect.right - rect.left, rect.bottom - rect.top, FALSE);
+				MoveWindow(thisPage->hwndTreeView, rect.left, rect.top, rect.right - rect.left, rect.bottom - rect.top, FALSE);
 			}
 
 			// Tell the resizing system that its window list is out of date
 			//
 			Resize::SetNeedRebuild(true);
 
-			// Try setting the fonts in the TreeView and Edit controls, ignoring the dialog template
+			// Try setting the fonts in the TreeView and Edit controls, overriding the dialog template
 			//
 			HDC hdc = GetDC(hWnd);
-			HFONT hFont = GetFont(hdc, FC_INFORMATION, true);
+			HFONT hFont = GetFont(hdc, FC_DIALOG, true);
 			ReleaseDC(hWnd, hdc);
-			SendMessage(treeControlHwnd, WM_SETFONT, (WPARAM)hFont, TRUE);
-			SendMessage(editControlHwnd, WM_SETFONT, (WPARAM)hFont, TRUE);
+			SendMessage(thisPage->hwndTreeView, WM_SETFONT, (WPARAM)hFont, TRUE);
+			SendMessage(thisPage->hwndEdit, WM_SETFONT, (WPARAM)hFont, TRUE);
 
 			// Build the TreeView
 			//
-			thisPage->BuildTreeView(treeControlHwnd);
+			thisPage->BuildTreeView();
 
 			DWORD tabSpacing = 12;
-			SendDlgItemMessage(hWnd, IDC_MONITOR_TEXT, EM_SETTABSTOPS, 1, (LPARAM)&tabSpacing);
+			SendMessage(thisPage->hwndEdit, EM_SETTABSTOPS, 1, reinterpret_cast<LPARAM>(&tabSpacing));
 			break;
 		}
 
@@ -379,8 +384,7 @@ INT_PTR CALLBACK MonitorPage::MonitorPageProc(HWND hWnd, UINT uMessage, WPARAM w
 			if (0 == thisPage) {
 				break;
 			}
-			treeControlHwnd = GetDlgItem(hWnd, IDC_TREE1);
-			if ( treeControlHwnd == reinterpret_cast<HWND>(wParam) ) {
+			if ( thisPage->hwndTreeView == reinterpret_cast<HWND>(wParam) ) {
 				TVITEMEX itemEx;
 				SecureZeroMemory(&itemEx, sizeof(itemEx));
 				itemEx.mask = TVIF_PARAM;
@@ -392,31 +396,31 @@ INT_PTR CALLBACK MonitorPage::MonitorPageProc(HWND hWnd, UINT uMessage, WPARAM w
 					// The WM_CONTEXTMENU is from a Shift+F10 keypress on the selected item:
 					// find the selected item and where to pop up the menu
 					//
-					itemEx.hItem = reinterpret_cast<HTREEITEM>(SendMessage(treeControlHwnd, TVM_GETNEXTITEM, TVGN_CARET, 0));
+					itemEx.hItem = reinterpret_cast<HTREEITEM>(SendMessage(thisPage->hwndTreeView, TVM_GETNEXTITEM, TVGN_CARET, 0));
 					RECT itemRect;
 					*reinterpret_cast<HTREEITEM *>(&itemRect) = itemEx.hItem;
-					SendMessage(treeControlHwnd, TVM_GETITEMRECT, TRUE, reinterpret_cast<LPARAM>(&itemRect));
+					SendMessage(thisPage->hwndTreeView, TVM_GETITEMRECT, TRUE, reinterpret_cast<LPARAM>(&itemRect));
 					//pt.x = itemRect.left + (itemRect.right - itemRect.left) / 2;
 					//pt.y = itemRect.top + (itemRect.bottom - itemRect.top) / 2;
 					pt.x = itemRect.right - 8;
 					pt.y = itemRect.bottom - 8;
-					ClientToScreen(treeControlHwnd, &pt);
+					ClientToScreen(thisPage->hwndTreeView, &pt);
 				} else {
 
 					// The WM_CONTEXTMENU is from a mouse right-click: see where the user clicked
 					//
 					TVHITTESTINFO hitTest;
 					hitTest.pt = pt;
-					ScreenToClient(treeControlHwnd, &hitTest.pt);
+					ScreenToClient(thisPage->hwndTreeView, &hitTest.pt);
 					hitTest.flags = 0;
 					hitTest.hItem = 0;
-					SendMessage(treeControlHwnd, TVM_HITTEST, 0, reinterpret_cast<LPARAM>(&hitTest));
+					SendMessage(thisPage->hwndTreeView, TVM_HITTEST, 0, reinterpret_cast<LPARAM>(&hitTest));
 					if ( 0 != (hitTest.flags & TVHT_ONITEM) ) {
 						itemEx.hItem = hitTest.hItem;
 					}
 				}
 				if ( 0 != itemEx.hItem ) {
-					SendMessage(treeControlHwnd, TVM_GETITEM, 0, reinterpret_cast<LPARAM>(&itemEx));
+					SendMessage(thisPage->hwndTreeView, TVM_GETITEM, 0, reinterpret_cast<LPARAM>(&itemEx));
 					TreeViewItem * tvItem = reinterpret_cast<TreeViewItem *>(itemEx.lParam);
 					if ( 0 != tvItem ) {
 						tvItem->Handle_WM_CONTEXTMENU(thisPage, &pt);
@@ -486,7 +490,6 @@ INT_PTR CALLBACK MonitorPage::MonitorPageProc(HWND hWnd, UINT uMessage, WPARAM w
 				case TVN_SELCHANGEDW:
 					NMTREEVIEWW * pNMTREEVIEWW;
 					pNMTREEVIEWW = reinterpret_cast<NMTREEVIEWW *>(lParam);
-					treeControlHwnd = GetDlgItem(hWnd, IDC_TREE1);
 
 					// Call the associated TreeViewItem object to handle the selection
 					//
@@ -498,9 +501,9 @@ INT_PTR CALLBACK MonitorPage::MonitorPageProc(HWND hWnd, UINT uMessage, WPARAM w
 				// Convert a right-click in the TreeView into a WM_CONTEXTMENU message
 				//
 				case NM_RCLICK:
-					treeControlHwnd = GetDlgItem(hWnd, IDC_TREE1);
-					if ( pNMHDR->hwndFrom == treeControlHwnd ) {
-						SendMessage(hWnd, WM_CONTEXTMENU, reinterpret_cast<WPARAM>(treeControlHwnd), GetMessagePos());
+					//treeControlHwnd = GetDlgItem(hWnd, IDC_TREE1);
+					if ( pNMHDR->hwndFrom == thisPage->hwndTreeView ) {
+						SendMessage(hWnd, WM_CONTEXTMENU, reinterpret_cast<WPARAM>(thisPage->hwndTreeView), GetMessagePos());
 						SetWindowLongPtrW(hWnd, DWLP_MSGRESULT, TRUE);
 						return TRUE;										// Suppress default handling of NM_RCLICK
 					}
@@ -568,6 +571,8 @@ INT_PTR CALLBACK MonitorPage::MonitorPageProc(HWND hWnd, UINT uMessage, WPARAM w
 				//  0x0000FFFF ... hence the cast to signed short.
 				//
 				xPosNew = static_cast<signed short>(LOWORD(lParam));
+				HWND treeControlHwnd;
+				HWND editControlHwnd;
 
 				treeControlHwnd = GetDlgItem(hWnd, IDC_TREE1);
 				GetWindowRect(treeControlHwnd, &tvRect);

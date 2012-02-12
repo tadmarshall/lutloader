@@ -10,6 +10,7 @@
 #include "resource.h"
 #include "Utility.h"
 #include <strsafe.h>
+#include <banned.h>
 
 // Optional "features"
 //
@@ -60,6 +61,8 @@ static wchar_t * MonitorSummaryItemClassName = L"Monitor Summary Item";
 MonitorSummaryItem::MonitorSummaryItem(Monitor * hostMonitor) :
 		monitor(hostMonitor),
 		hwnd(0),
+		hwndLoadLutButton(0),
+		hwndRescanButton(0),
 		lutViewShowsProfile(false),
 		paintCount(0)
 {
@@ -117,10 +120,14 @@ LRESULT CALLBACK MonitorSummaryItem::MonitorSummaryItemProc(HWND hWnd, UINT uMes
 					myMonitor = thisView->monitor;
 					activeProfile = myMonitor->GetActiveProfile();
 					pProfileLUT = activeProfile->GetLutPointer();
-					if ( 0 == pProfileLUT ) {
-						break;
+					if ( pProfileLUT ) {
+						myMonitor->WriteLutToCard(pProfileLUT);
+					} else {
+						LUT * pLUT = new LUT;
+						GetSignedLUT(pLUT);
+						myMonitor->WriteLutToCard(pLUT);
+						delete pLUT;
 					}
-					myMonitor->WriteLutToCard(pProfileLUT);
 					myMonitor->ReadLutFromCard();
 					thisView->lutViewShowsProfile = false;
 					thisView->Update();
@@ -362,16 +369,22 @@ HWND MonitorSummaryItem::CreateMonitorSummaryItemWindow(
 	// If there are no monitors, our role in life is to say so, so we don't need buttons
 	//
 	if (monitor) {
+
+		Profile * activeProfile = monitor->GetActiveProfile();
+		if (activeProfile) {
+			activeProfile->LoadFullProfile(false);
+		}
+
 		RECT buttonRect;
 		buttonRect.left = baseButtonRect.left - summaryPageRect.left - x;
 		buttonRect.right = buttonRect.left + baseButtonRect.right - baseButtonRect.left;
 		buttonRect.top = width - buttonRect.right;
 		buttonRect.bottom = buttonRect.top + baseButtonRect.bottom - baseButtonRect.top;
 
-		HWND hwndLoadLutButton = CreateWindowEx(
+		hwndLoadLutButton = CreateWindowEx(
 				WS_EX_NOPARENTNOTIFY,
 				L"Button",
-				L"Load LUT",
+				(activeProfile && activeProfile->GetLutPointer()) ? L"Load LUT" : L"Set linear",
 				WS_CHILD | WS_GROUP | WS_VISIBLE | WS_TABSTOP,
 				buttonRect.left,
 				buttonRect.top,
@@ -384,14 +397,14 @@ HWND MonitorSummaryItem::CreateMonitorSummaryItemWindow(
 		SetWindowLongPtr(hwndLoadLutButton, GWLP_ID, IDC_LOAD_BUTTON);
 
 		HDC hdc = GetDC(hwndLoadLutButton);
-		HFONT hFont = GetFont(hdc, FC_INFORMATION, true);
+		HFONT hFont = GetFont(hdc, FC_DIALOG, true);
 		ReleaseDC(hwndLoadLutButton, hdc);
 		SendMessage(hwndLoadLutButton, WM_SETFONT, (WPARAM)hFont, TRUE);
 
 		buttonRect.top += buttonRect.top + baseButtonRect.bottom - baseButtonRect.top;
 		buttonRect.bottom = buttonRect.top + baseButtonRect.bottom - baseButtonRect.top;
 
-		HWND hwndRescanButton = CreateWindowEx(
+		hwndRescanButton = CreateWindowEx(
 				WS_EX_NOPARENTNOTIFY,
 				L"Button",
 				L"Rescan",
@@ -418,11 +431,13 @@ HWND MonitorSummaryItem::CreateMonitorSummaryItemWindow(
 }
 
 void MonitorSummaryItem::Update(void) {
+	Profile * activeProfile = monitor->GetActiveProfile();
+	if (activeProfile) {
+		activeProfile->LoadFullProfile(false);
+	}
 	if (lutViewShowsProfile) {
-		Profile * activeProfile = monitor->GetActiveProfile();
 		if (activeProfile) {
 			summaryLutView->SetText(activeProfile->GetName());
-			activeProfile->LoadFullProfile(false);
 			summaryLutView->SetLUT(activeProfile->GetLutPointer());
 		} else {
 			summaryLutView->SetText(L"No profile");
@@ -433,6 +448,12 @@ void MonitorSummaryItem::Update(void) {
 		summaryLutView->SetLUT(monitor->GetLutPointer());
 	}
 	summaryLutView->SetUpdateBitmap();
+	SendMessage(
+			hwndLoadLutButton,
+			WM_SETTEXT,
+			0,
+			reinterpret_cast<LPARAM>( (activeProfile && activeProfile->GetLutPointer()) ? L"Load LUT" : L"Set linear" )
+	);
 	InvalidateRect(hwndSummaryLUT, summaryLutView->GetGraphRect(), FALSE);
 }
 
@@ -495,9 +516,21 @@ void MonitorSummaryItem::DrawTextOnDC(HDC hdc) {
 	}
 	StringCbCopy(buf, sizeof(buf), s.c_str());
 
+#if 0
+	hFont = (HFONT)SendMessage(GetDlgItem(GetParent(GetParent(hwnd)), IDCANCEL), WM_GETFONT, 0, 0);
+	oldFont = SelectObject(hdc, hFont);
+	//GetTextFace(hdc, _countof(buf), buf);
+	LOGFONT lf;
+	SecureZeroMemory(&lf, sizeof(lf));
+	GetObject(hFont, sizeof(lf), &lf);
+	StringCbCopy(buf, sizeof(buf), lf.lfFaceName);
+	hFont = GetFont(hdc, FC_HEADING);
+	SelectObject(hdc, hFont);
+#else
 	hFont = GetFont(hdc, FC_HEADING);
 	oldFont = SelectObject(hdc, hFont);
-	GetTextExtentPoint32(hdc, buf, static_cast<int>(wcslen(buf)), &sizeHeading);
+#endif
+	GetTextExtentPoint32(hdc, buf, StringLength(buf), &sizeHeading);
 	headingRect.right = headingRect.left + sizeHeading.cx;
 	headingRect.bottom = headingRect.top + sizeHeading.cy;
 
@@ -552,7 +585,7 @@ void MonitorSummaryItem::DrawTextOnDC(HDC hdc) {
 		primaryMonitorRect = headingRect;
 		int horizontalPadding = static_cast<int>(HORIZONTAL_PADDING * dpiScale);
 		primaryMonitorRect.left += sizeHeading.cx + horizontalPadding;
-		GetTextExtentPoint32(hdc, buf, static_cast<int>(wcslen(buf)), &sz2);
+		GetTextExtentPoint32(hdc, buf, StringLength(buf), &sz2);
 		primaryMonitorRect.top += sizeHeading.cy - sz2.cy;
 		primaryMonitorRect.right = primaryMonitorRect.left + sz2.cx;
 		primaryMonitorRect.bottom = primaryMonitorRect.top + sz2.cy;
@@ -581,7 +614,7 @@ void MonitorSummaryItem::DrawTextOnDC(HDC hdc) {
 	}
 	activeProfileDisplayText = s;
 	StringCbCopy(buf, sizeof(buf), s.c_str());
-	GetTextExtentPoint32(hdc, buf, static_cast<int>(wcslen(buf)), &sizeActiveProfile);
+	GetTextExtentPoint32(hdc, buf, StringLength(buf), &sizeActiveProfile);
 	lutStatusRect = activeProfileRect;
 	lutStatusRect.top += sizeActiveProfile.cy + verticalPaddingPerLine;
 	activeProfileRect.right = activeProfileRect.left + sizeActiveProfile.cx;
@@ -668,7 +701,7 @@ void MonitorSummaryItem::DrawTextOnDC(HDC hdc) {
 	StringCbCat(buf, sizeof(buf), buf2);
 #endif
 
-	GetTextExtentPoint32(hdc, buf, static_cast<int>(wcslen(buf)), &sizeLutStatus);
+	GetTextExtentPoint32(hdc, buf, StringLength(buf), &sizeLutStatus);
 	lutStatusRect.right = lutStatusRect.left + sizeLutStatus.cx;
 	lutStatusRect.bottom = lutStatusRect.top + sizeLutStatus.cy;
 	SetTextColor(hdc, color);
@@ -689,7 +722,9 @@ void MonitorSummaryItem::DrawTextOnDC(HDC hdc) {
 		s += inactive->GetName();
 		StringCbCopy(buf, sizeof(buf), s.c_str());
 		SetTextColor(hdc, disabledColor);
-		//GetTextExtentPoint32(hdc, buf, static_cast<int>(wcslen(buf)), &sz);
+		GetTextExtentPoint32(hdc, buf, StringLength(buf), &sz2);
+		inactiveProfileRect.right = inactiveProfileRect.left + sz2.cx;
+		inactiveProfileRect.bottom = inactiveProfileRect.top + sz2.cy;
 		if (RectVisible(hdc, &inactiveProfileRect)) {
 			DrawText(hdc, buf, -1, &inactiveProfileRect, 0);
 			ExcludeClipRect(hdc, inactiveProfileRect.left, inactiveProfileRect.top, inactiveProfileRect.right, inactiveProfileRect.bottom);

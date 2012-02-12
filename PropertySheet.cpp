@@ -12,6 +12,7 @@
 #include "resource.h"
 #include "Utility.h"
 #include <strsafe.h>
+#include <banned.h>
 
 // Optional "features"
 //
@@ -268,7 +269,7 @@ INT_PTR CALLBACK SummaryPageProc(HWND hWnd, UINT uMessage, WPARAM wParam, LPARAM
 			HWND cancelButton = GetDlgItem(parent, IDCANCEL);
 			SetWindowText(cancelButton, L"Close");
 			hdc = GetDC(cancelButton);
-			HFONT hFont = GetFont(hdc, FC_INFORMATION, true);
+			HFONT hFont = GetFont(hdc, FC_DIALOG, true);
 			ReleaseDC(cancelButton, hdc);
 			SendMessage(cancelButton, WM_SETFONT, (WPARAM)hFont, TRUE);
 			style = GetWindowLongPtr(cancelButton, GWL_STYLE);
@@ -451,7 +452,7 @@ int CALLBACK PropSheetCallback(HWND hWnd, UINT uMsg, LPARAM lParam) {
 			// Change the font on the tab control
 			//
 			HDC hdc = GetDC(hWnd);
-			HFONT hFont = GetFont(hdc, FC_INFORMATION, true);
+			HFONT hFont = GetFont(hdc, FC_DIALOG, true);
 			ReleaseDC(hWnd, hdc);
 			SendMessage(tabControl, WM_SETFONT, (WPARAM)hFont, TRUE);
 
@@ -498,7 +499,9 @@ int ShowPropertySheet(int nShowCmd) {
 		//
 		pages[0].dwSize = sizeof(pages[0]);
 		pages[0].hInstance = g_hInst;
-		pages[0].pszTemplate = MAKEINTRESOURCE(IDD_SUMMARY_PAGE);
+		pages[0].pszTemplate = VistaOrHigher() ?
+				MAKEINTRESOURCE(IDD_SUMMARY_PAGE_VISTA) :
+				MAKEINTRESOURCE(IDD_SUMMARY_PAGE_XP);
 		pages[0].pszIcon = NULL;
 		pages[0].pfnDlgProc = SummaryPageProc;
 		pages[0].lParam = 0;
@@ -513,7 +516,9 @@ int ShowPropertySheet(int nShowCmd) {
 
 			pages[i+1].dwSize = sizeof(pages[0]);
 			pages[i+1].hInstance = g_hInst;
-			pages[i+1].pszTemplate = MAKEINTRESOURCE(IDD_MONITOR_PAGE);
+			pages[i+1].pszTemplate = VistaOrHigher() ?
+					MAKEINTRESOURCE(IDD_MONITOR_PAGE_VISTA) :
+					MAKEINTRESOURCE(IDD_MONITOR_PAGE_XP);
 			pages[i+1].pszIcon = NULL;
 			pages[i+1].pfnDlgProc = MonitorPage::MonitorPageProc;
 			pages[i+1].lParam = reinterpret_cast<LPARAM>(monitorPage);

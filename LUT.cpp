@@ -3,6 +3,7 @@
 
 #include "stdafx.h"
 #include "LUT.h"
+#include <banned.h>
 
 // Function to test LUT for linearity
 //
@@ -97,5 +98,17 @@ IS_LINEAR IsLinear(LUT * pLUT) {
 // Write a "signed" linear LUT to a provided address (caller owns memory)
 //
 void GetSignedLUT(LUT * pLUT) {
-	UNREFERENCED_PARAMETER(pLUT);
+
+	for ( size_t i = 0; i < 256; ++i ) {
+		WORD linear16 = static_cast<WORD>( (i << 8) + i);
+		pLUT->red[i] = linear16;
+		pLUT->green[i] = linear16;
+		pLUT->blue[i] = linear16;
+	}
+
+	// Add a "signature" to the linear LUT to help us detect other LUT loaders
+	//
+	pLUT->red[1] = 0x0102;
+	pLUT->red[2] = 0x0203;
+	pLUT->red[3] = 0x0304;
 }

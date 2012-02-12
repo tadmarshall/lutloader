@@ -5,6 +5,7 @@
 #include "stdafx.h"
 #include "Utility.h"
 #include <strsafe.h>
+#include <banned.h>
 
 // Display data as a hex & ANSI dump
 //
@@ -61,11 +62,18 @@ wstring ShowError(const wchar_t * functionName, const wchar_t * preMessageText, 
 //
 bool VistaOrHigher(void) {
 
-	OSVERSIONINFOEX osInfo;
-	SecureZeroMemory(&osInfo, sizeof(osInfo));
-	osInfo.dwOSVersionInfoSize = sizeof(osInfo);
-	GetVersionEx(reinterpret_cast<OSVERSIONINFO *>(&osInfo));
-	return (osInfo.dwMajorVersion >= 6);
+	static unsigned int osMajorVersion;
+
+	//osMajorVersion = 6;
+
+	if ( 0 == osMajorVersion ) {
+		OSVERSIONINFOEX osInfo;
+		SecureZeroMemory(&osInfo, sizeof(osInfo));
+		osInfo.dwOSVersionInfoSize = sizeof(osInfo);
+		GetVersionEx(reinterpret_cast<OSVERSIONINFO *>(&osInfo));
+		osMajorVersion = osInfo.dwMajorVersion;
+	}
+	return (osMajorVersion >= 6);
 }
 
 // Lookup a name in a table -- should perhaps be rewritten to use some 'std' thing
@@ -86,26 +94,37 @@ const wchar_t * LookupName(
 // Get a font based on a font class
 //
 HFONT GetFont(HDC hdc, FONT_CLASS fontClass, bool newCopy) {
+
 	if (newCopy) {
 		int fontPitch;
 		int fontWeight;
+		wchar_t * faceName;
 
 		switch (fontClass) {
 
 			case FC_HEADING:
 				fontPitch = 12;
 				fontWeight = FW_NORMAL;
+				faceName = VistaOrHigher() ? L"Segoe UI" : L"Arial";
 				break;
 
 			case FC_FILENAME:
 				fontPitch = 11;
 				fontWeight = FW_NORMAL;
+				faceName = VistaOrHigher() ? L"Segoe UI" : L"Arial";
+				break;
+
+			case FC_DIALOG:
+				fontPitch = VistaOrHigher() ? 9 : 8;
+				fontWeight = FW_NORMAL;
+				faceName = VistaOrHigher() ? L"Segoe UI" : L"MS Shell Dlg 2";
 				break;
 
 			default:
 			case FC_INFORMATION:
 				fontPitch = 9;
 				fontWeight = FW_NORMAL;
+				faceName = VistaOrHigher() ? L"Segoe UI" : L"Arial";
 				break;
 		}
 		int nHeight = -MulDiv(fontPitch, GetDeviceCaps(hdc, LOGPIXELSY), 72);
@@ -123,14 +142,16 @@ HFONT GetFont(HDC hdc, FONT_CLASS fontClass, bool newCopy) {
 			CLIP_DEFAULT_PRECIS,		// clipping precision
 			CLEARTYPE_QUALITY,			// quality
 			FF_SWISS,					// font family
-			L"Segoe UI" );				// face name
+			faceName );					// face name
 	} else {
 		static HFONT fontHeading;
 		static HFONT fontFilename;
 		static HFONT fontInformation;
+		static HFONT fontDialog;
 
 		int fontPitch;
 		int fontWeight;
+		wchar_t * faceName;
 
 		switch (fontClass) {
 
@@ -140,6 +161,7 @@ HFONT GetFont(HDC hdc, FONT_CLASS fontClass, bool newCopy) {
 				}
 				fontPitch = 12;
 				fontWeight = FW_NORMAL;
+				faceName = VistaOrHigher() ? L"Segoe UI" : L"Arial";
 				break;
 
 			case FC_FILENAME:
@@ -148,6 +170,16 @@ HFONT GetFont(HDC hdc, FONT_CLASS fontClass, bool newCopy) {
 				}
 				fontPitch = 11;
 				fontWeight = FW_NORMAL;
+				faceName = VistaOrHigher() ? L"Segoe UI" : L"Arial";
+				break;
+
+			case FC_DIALOG:
+				if (fontDialog) {
+					return fontDialog;
+				}
+				fontPitch = VistaOrHigher() ? 9 : 8;
+				fontWeight = FW_NORMAL;
+				faceName = VistaOrHigher() ? L"Segoe UI" : L"MS Shell Dlg 2";
 				break;
 
 			default:
@@ -157,6 +189,7 @@ HFONT GetFont(HDC hdc, FONT_CLASS fontClass, bool newCopy) {
 				}
 				fontPitch = 9;
 				fontWeight = FW_NORMAL;
+				faceName = VistaOrHigher() ? L"Segoe UI" : L"Arial";
 				break;
 		}
 		int nHeight = -MulDiv(fontPitch, GetDeviceCaps(hdc, LOGPIXELSY), 72);
@@ -174,7 +207,7 @@ HFONT GetFont(HDC hdc, FONT_CLASS fontClass, bool newCopy) {
 			CLIP_DEFAULT_PRECIS,		// clipping precision
 			CLEARTYPE_QUALITY,			// quality
 			FF_SWISS,					// font family
-			L"Segoe UI" );				// face name
+			faceName );					// face name
 
 		switch (fontClass) {
 
@@ -184,6 +217,10 @@ HFONT GetFont(HDC hdc, FONT_CLASS fontClass, bool newCopy) {
 
 			case FC_FILENAME:
 				fontFilename = hFont;
+				break;
+
+			case FC_DIALOG:
+				fontDialog = hFont;
 				break;
 
 			default:

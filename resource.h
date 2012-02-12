@@ -10,11 +10,10 @@
 #define IDB_BITMAP1                     106
 #define IDB_BITMAP2                     107
 #define IDR_LUTVIEW_POPUP_MENU          108
-#define IDD_SUMMARY_PAGE                200
-#define IDD_MONITOR_PAGE                201
-#define IDD_SUMMARY_PAGE_OLD            202
-#define IDD_MONITOR_PAGE_OLD            203
-#define IDD_SUMMARY_PAGE_SAVED          204
+#define IDD_SUMMARY_PAGE_XP             200
+#define IDD_SUMMARY_PAGE_VISTA          201
+#define IDD_MONITOR_PAGE_XP             202
+#define IDD_MONITOR_PAGE_VISTA          203
 #define IDI_ICON_SETUPAPI_35            300
 #define IDI_ICON_BLANK                  301
 #define IDI_BACKCOLOR                   302
@@ -30,6 +29,8 @@
 #define ID_WHITEBACKGROUND              40001
 #define ID_BLACKBACKGROUND              40002
 #define ID_GRADIENTBACKGROUND           40003
+#define ID_SET_DEFAULT_PROFILE          40004
+#define ID_REMOVE_ASSOCIATION           40005
 
 // Next default values for new objects
 // 
@@ -37,7 +38,7 @@
 #ifndef APSTUDIO_READONLY_SYMBOLS
 #define _APS_NO_MFC                     1
 #define _APS_NEXT_RESOURCE_VALUE        109
-#define _APS_NEXT_COMMAND_VALUE         40004
+#define _APS_NEXT_COMMAND_VALUE         40006
 #define _APS_NEXT_CONTROL_VALUE         1010
 #define _APS_NEXT_SYMED_VALUE           101
 #endif

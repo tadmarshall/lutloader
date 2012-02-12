@@ -35,6 +35,8 @@ public:
 	void Handle_WM_CONTEXTMENU(MonitorPage * monitorPage, POINT * screenClickPoint);
 
 private:
+	void ProfileContextMenu(MonitorPage * monitorPage, POINT * screenClickPoint, bool isUser);
+
 	wstring				ItemText;
 	int					ItemType;
 	Monitor *			MonitorPtr;

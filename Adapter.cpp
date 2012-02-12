@@ -3,6 +3,7 @@
 
 #include "stdafx.h"
 #include "Adapter.h"
+#include <banned.h>
 
 // Constructor
 //

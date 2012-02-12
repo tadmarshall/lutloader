@@ -13,8 +13,9 @@
 #include "Utility.h"
 #include "resource.h"
 #include <strsafe.h>
-#include <wingdi.h>
+#include <banned.h>
 
+#pragma comment(lib, "comctl32.lib")				// For PropertySheet
 #pragma comment(lib, "mscms.lib")					// For GetColorDirectory
 #pragma comment(lib, "msimg32.lib")					// For GradientFill
 
@@ -98,23 +99,9 @@ int LoadAllLUTs(void) {
 	LUT * pLUT;
 	if (count) {
 
-		// Create a linear LUT
-		//
-		for ( size_t i = 0; i < 256; ++i ) {
-			WORD linear16 = static_cast<WORD>( (i << 8) + i);
-			linearLUT.red[i] = linear16;
-			linearLUT.green[i] = linear16;
-			linearLUT.blue[i] = linear16;
-		}
-
-		// Add a "signature" to the linear LUT to help us detect other LUT loaders
-		//
-		linearLUT.red[1] = 0x0102;
-		linearLUT.red[2] = 0x0203;
-		linearLUT.red[3] = 0x0304;
-
 		// First, set the "screen" DC to linear
 		//
+		GetSignedLUT(&linearLUT);
 		HDC hdc = GetDC(0);
 		if (hdc) {
 			++linearLUT.red[1];

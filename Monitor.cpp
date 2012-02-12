@@ -8,7 +8,9 @@
 #include "MonitorPage.h"
 #include "MonitorSummaryItem.h"
 #include "Utility.h"
+//#define STRSAFE_USE_SECURE_CRT 1
 #include <strsafe.h>
+#include <banned.h>
 
 // Optional "features"
 //
@@ -98,7 +100,7 @@ void Monitor::Initialize(void) {
 
 		// Vista or higher, set up user profile, if any
 		//
-		len = lstrlenW(L"\\Registry\\Machine\\System\\CurrentControlSet\\Control\\Class");
+		len = StringLength(L"\\Registry\\Machine\\System\\CurrentControlSet\\Control\\Class");
 		StringCbCopy( registryKey, sizeof(registryKey),
 			L"Software\\Microsoft\\Windows NT\\CurrentVersion\\ICM\\ProfileAssociations\\Display");
 		StringCbCat(registryKey, sizeof(registryKey), &DeviceKey.c_str()[len]);
@@ -107,7 +109,7 @@ void Monitor::Initialize(void) {
 
 	// Set up SystemProfile for any supported OS (this will be the only profile for XP)
 	//
-	len = lstrlenW(L"\\Registry\\Machine\\");
+	len = StringLength(L"\\Registry\\Machine\\");
 	StringCbCopy(registryKey, sizeof(registryKey), &DeviceKey.c_str()[len]);
 	SystemProfile = Profile::GetAllProfiles(HKEY_LOCAL_MACHINE, registryKey, 0, SystemProfileList);
 }
@@ -117,14 +119,14 @@ bool Monitor::SetDefaultProfile(Profile * profile, bool userProfile, wstring & e
 	int len;
 	bool success;
 	if ( userProfile ) {
-		len = lstrlenW(L"\\Registry\\Machine\\System\\CurrentControlSet\\Control\\Class");
+		len = StringLength(L"\\Registry\\Machine\\System\\CurrentControlSet\\Control\\Class");
 		StringCbCopy( registryKey, sizeof(registryKey),
 			L"Software\\Microsoft\\Windows NT\\CurrentVersion\\ICM\\ProfileAssociations\\Display");
 		StringCbCat(registryKey, sizeof(registryKey), &DeviceKey.c_str()[len]);
 		success = profile->SetDefaultProfile(HKEY_CURRENT_USER, registryKey, errorString);
 		UserProfile = profile;
 	} else {
-		len = lstrlenW(L"\\Registry\\Machine\\");
+		len = StringLength(L"\\Registry\\Machine\\");
 		StringCbCopy(registryKey, sizeof(registryKey), &DeviceKey.c_str()[len]);
 		success = profile->SetDefaultProfile(HKEY_LOCAL_MACHINE, registryKey, errorString);
 		SystemProfile = profile;

@@ -7,6 +7,7 @@
 #include "Profile.h"
 #include "Utility.h"
 #include <strsafe.h>
+#include <banned.h>
 
 extern wchar_t * ColorDirectory;
 extern wchar_t * ColorDirectoryErrorString;
@@ -217,6 +218,7 @@ Profile * Profile::GetAllProfiles(HKEY hKeyBase, const wchar_t * registryKey, bo
 	int len = 0;
 	Profile * profile = 0;
 	pList.clear();
+
 	if (ERROR_SUCCESS == RegOpenKeyEx(hKeyBase, registryKey, 0, KEY_QUERY_VALUE, &hKey)) {
 		DWORD dataSize;
 
@@ -228,18 +230,15 @@ Profile * Profile::GetAllProfiles(HKEY hKeyBase, const wchar_t * registryKey, bo
 			if (profileListBase) {
 				memset(profileListBase, 0, dataSize);
 				RegQueryValueEx(hKey, L"ICMProfile", NULL, NULL, profileListBase, &dataSize);
-
 				wchar_t * profileListPtr = reinterpret_cast<wchar_t *>(profileListBase);
-				if (*profileListPtr) {
 
-					// Find the last profile in the list
-					//
-					while (*profileListPtr) {
-						profile = Add(new Profile(profileListPtr));
-						pList.push_back(profile);
-						len = 1 + lstrlenW(profileListPtr);
-						profileListPtr += len;
-					}
+				// Find the last profile in the list
+				//
+				while (*profileListPtr) {
+					profile = Add(new Profile(profileListPtr));
+					pList.push_back(profile);
+					len = 1 + StringLength(profileListPtr);
+					profileListPtr += len;
 				}
 				free(profileListBase);
 			}

@@ -4,6 +4,8 @@
 
 #pragma once
 
+//#define _BIND_TO_CURRENT_CRT_VERSION 0		// Do NOT force every user to have the CRT version I have
+
 #define STRICT								// Use strict type checking in <windows.h>
 
 #ifndef WINVER
@@ -51,4 +53,14 @@ __inline WORD swap16(const WORD n) {
 //
 __inline DWORD swap32(const DWORD n) {
 	return ((n & 0xFF) << 24) | ((n & 0xFF00) << 8) | ((n & 0xFF0000) >> 8) | ((n & 0xFF000000) >> 24);
+}
+
+// A basic Unicode string length routine, so I can get rid of all the lstrlenW and wcslen calls
+//
+__inline int StringLength(const wchar_t * str) {
+	const wchar_t * p = str;
+	while (*p) {
+		++p;
+	}
+	return static_cast<int>(p - str);
 }

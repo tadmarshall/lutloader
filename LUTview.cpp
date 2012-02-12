@@ -7,6 +7,7 @@
 #include "resource.h"
 #include "Utility.h"
 #include <strsafe.h>
+#include <banned.h>
 
 // Optional "features"
 //
@@ -341,7 +342,7 @@ void LUTview::DrawGraphOnDC(HDC hdc, RECT * targetRect) {
 
 	hFont = GetFont(hdc, FC_INFORMATION);
 	oldFont = SelectObject(hdc, hFont);
-	GetTextExtentPoint32(hdc, buf, static_cast<int>(wcslen(buf)), &headingSize);
+	GetTextExtentPoint32(hdc, buf, StringLength(buf), &headingSize);
 
 	int graphCaptionIndentX = static_cast<int>(GRAPH_CAPTION_INDENT_X * dpiScale);
 	int graphCaptionIndentY = static_cast<int>(GRAPH_CAPTION_INDENT_Y * dpiScale);
@@ -878,7 +879,7 @@ void LUTview::PaintNoLutTextOnScreenDC(HDC hdc) {
 		StringCbCopy(buf, sizeof(buf), displayText.c_str());
 		hFont = GetFont(hdc, FC_HEADING);
 		oldFont = SelectObject(hdc, hFont);
-		GetTextExtentPoint32(hdc, buf, static_cast<int>(wcslen(buf)), &headingSize);
+		GetTextExtentPoint32(hdc, buf, StringLength(buf), &headingSize);
 		rect.bottom = innerRect.top + (innerRect.bottom - innerRect.top) / 2;
 		rect.top = rect.bottom - headingSize.cy;
 		rect.left = innerRect.left + (innerRect.right - innerRect.left - headingSize.cx) / 2;
@@ -890,7 +891,7 @@ void LUTview::PaintNoLutTextOnScreenDC(HDC hdc) {
 		StringCbCopy(buf, sizeof(buf), L"No data to display");
 		hFont = GetFont(hdc, FC_INFORMATION);
 		SelectObject(hdc, hFont);
-		GetTextExtentPoint32(hdc, buf, static_cast<int>(wcslen(buf)), &headingSize);
+		GetTextExtentPoint32(hdc, buf, StringLength(buf), &headingSize);
 		rect.top = rect.bottom;
 		rect.bottom = rect.top + headingSize.cy;
 		rect.left = innerRect.left + (innerRect.right - innerRect.left - headingSize.cx) / 2;

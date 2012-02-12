@@ -6,6 +6,7 @@
 #include "Resize.h"
 #include "Utility.h"
 #include "resource.h"
+#include <banned.h>
 
 // Constructor
 //

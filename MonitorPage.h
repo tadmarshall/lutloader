@@ -3,7 +3,7 @@
 
 #pragma once
 #include "stdafx.h"
-#include <commctrl.h>
+#include <commctrl.h>		// For HTREEITEM
 
 // Forward references
 //
@@ -16,7 +16,8 @@ public:
 	MonitorPage(Monitor * hostMonitor);
 	~MonitorPage();
 
-	HWND GetHWND(void) const;
+	HWND GetHwnd(void) const;
+	HWND GetTreeViewHwnd(void) const;
 	void SetEditControlText(wstring newText);
 	Monitor * GetMonitor(void) const;
 	void Reset(void);
@@ -24,12 +25,14 @@ public:
 	static INT_PTR CALLBACK MonitorPageProc(HWND hWnd, UINT uMessage, WPARAM wParam, LPARAM lParam);
 
 private:
-	void BuildTreeView(HWND treeControlHwnd);
+	void BuildTreeView(void);
 	TreeViewItem * AddTreeViewItem(TreeViewItem * treeViewItem);
 	void ClearTreeViewItemList(bool freeAllMemory);
 
 	Monitor *					monitor;
-	HWND						savedHWND;
+	HWND						hwnd;
+	HWND						hwndTreeView;
+	HWND						hwndEdit;
 	vector <TreeViewItem *>		treeviewitemList;
 	HTREEITEM					tvRoot;
 	HTREEITEM					tvUserProfiles;
