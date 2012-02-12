@@ -26,18 +26,20 @@ typedef enum tag_TREEVIEW_ITEM_TYPE {
 class TreeViewItem {
 
 public:
-	TreeViewItem(TREEVIEW_ITEM_TYPE itemType, const wchar_t * tviText);
+	TreeViewItem(TREEVIEW_ITEM_TYPE itemType);
+	//TreeViewItem(TREEVIEW_ITEM_TYPE itemType, const wchar_t * tviText);
 
 	void SetHTREEITEM(HTREEITEM hItem);
 	void SetMonitor(Monitor * monitor);
 	void SetProfile(Profile * profile);
+	int GetItemType(void) const;
+	Profile * GetProfilePtr(void) const;
 	void Handle_TVN_SELCHANGEDW(MonitorPage * monitorPage, NMTREEVIEWW * pNMTREEVIEWW);
 	void Handle_WM_CONTEXTMENU(MonitorPage * monitorPage, POINT * screenClickPoint);
 
 private:
 	void ProfileContextMenu(MonitorPage * monitorPage, POINT * screenClickPoint, bool isUser);
 
-	wstring				ItemText;
 	int					ItemType;
 	Monitor *			MonitorPtr;
 	Profile *			ProfilePtr;

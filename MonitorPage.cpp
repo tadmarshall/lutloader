@@ -19,6 +19,7 @@ extern WNDPROC oldEditWindowProc = 0;				// The original Edit control's window p
 
 // Symbols defined in other files
 //
+extern HINSTANCE g_hInst;							// Instance handle
 extern double dpiScale;								// Scaling factor for dots per inch (actual versus standard 96 DPI)
 
 // Constants
@@ -62,22 +63,6 @@ Monitor * MonitorPage::GetMonitor(void) const {
 	return monitor;
 }
 
-// A Reset() call tells us that our UI should be reset to starting condition,
-// assuming that we have had our WM_INITDIALOG call and so have something to reset
-//
-void MonitorPage::Reset(void) {
-	if (hwnd) {
-		resetting = true;
-		tvUserProfiles = 0;
-		tvSystemProfiles = 0;
-		HWND treeControlHwnd = GetDlgItem(hwnd, IDC_TREE1);
-		SendMessage(treeControlHwnd, TVM_DELETEITEM, 0, reinterpret_cast<LPARAM>(TVI_ROOT));
-		ClearTreeViewItemList(false);
-		resetting = false;
-		BuildTreeView();
-	}
-}
-
 // Add a TreeViewItem to the end of the list
 //
 TreeViewItem * MonitorPage::AddTreeViewItem(TreeViewItem * treeViewItem) {
@@ -99,6 +84,138 @@ void MonitorPage::ClearTreeViewItemList(bool freeAllMemory) {
 	}
 }
 
+// A Reset() call tells us that our UI should be reset to starting condition,
+// assuming that we have had our WM_INITDIALOG call and so have something to reset
+//
+void MonitorPage::Reset(void) {
+	if (hwnd) {
+		HTREEITEM hChild;
+		TVITEMEX itemEx;
+		TreeViewItem * tvItem;
+		Profile * previousProfileSelection;
+		bool userProfilesExpanded = false;
+
+		HTREEITEM hSelection = reinterpret_cast<HTREEITEM>(
+				SendMessage( hwndTreeView, TVM_GETNEXTITEM, TVGN_CARET, 0 ) );
+
+		SecureZeroMemory(&itemEx, sizeof(itemEx));
+		itemEx.mask = TVIF_HANDLE | TVIF_PARAM;
+		itemEx.hItem = hSelection;
+		SendMessage(hwndTreeView, TVM_GETITEM, 0, reinterpret_cast<LPARAM>(&itemEx));
+
+		TreeViewItem previousSelection(*reinterpret_cast<TreeViewItem *>(itemEx.lParam));
+
+		itemEx.mask = TVIF_HANDLE | TVIF_STATE;
+		itemEx.stateMask = TVIS_EXPANDED;
+		itemEx.hItem = tvRoot;
+		SendMessage(hwndTreeView, TVM_GETITEM, 0, reinterpret_cast<LPARAM>(&itemEx));
+		bool rootExpanded = (0 != (itemEx.state & TVIS_EXPANDED));
+
+		if (tvUserProfiles) {
+			itemEx.hItem = tvUserProfiles;
+			SendMessage(hwndTreeView, TVM_GETITEM, 0, reinterpret_cast<LPARAM>(&itemEx));
+			userProfilesExpanded = (0 != (itemEx.state & TVIS_EXPANDED));
+		}
+
+		itemEx.hItem = tvSystemProfiles;
+		SendMessage(hwndTreeView, TVM_GETITEM, 0, reinterpret_cast<LPARAM>(&itemEx));
+		bool systemProfilesExpanded = (0 != (itemEx.state & TVIS_EXPANDED));
+
+		resetting = true;
+		SendMessage(hwndTreeView, TVM_DELETEITEM, 0, reinterpret_cast<LPARAM>(TVI_ROOT));
+		ClearTreeViewItemList(false);
+
+		BuildTreeView();
+
+		if (rootExpanded) {
+			SendMessage(hwndTreeView, TVM_EXPAND, TVE_EXPAND, reinterpret_cast<LPARAM>(tvRoot));
+		}
+		if (userProfilesExpanded) {
+			SendMessage(hwndTreeView, TVM_EXPAND, TVE_EXPAND, reinterpret_cast<LPARAM>(tvUserProfiles));
+		}
+		if (systemProfilesExpanded) {
+			SendMessage(hwndTreeView, TVM_EXPAND, TVE_EXPAND, reinterpret_cast<LPARAM>(tvSystemProfiles));
+		}
+
+		switch (previousSelection.GetItemType()) {
+			case TREEVIEW_ITEM_TYPE_MONITOR:
+				SendMessage(hwndTreeView, TVM_SELECTITEM, TVGN_CARET, reinterpret_cast<LPARAM>(tvRoot));
+				break;
+
+			case TREEVIEW_ITEM_TYPE_USER_PROFILES:
+				SendMessage(hwndTreeView, TVM_SELECTITEM, TVGN_CARET, reinterpret_cast<LPARAM>(tvUserProfiles));
+				break;
+
+			case TREEVIEW_ITEM_TYPE_SYSTEM_PROFILES:
+				SendMessage(hwndTreeView, TVM_SELECTITEM, TVGN_CARET, reinterpret_cast<LPARAM>(tvSystemProfiles));
+				break;
+
+			case TREEVIEW_ITEM_TYPE_PROFILES:
+				SendMessage(hwndTreeView, TVM_SELECTITEM, TVGN_CARET, reinterpret_cast<LPARAM>(tvSystemProfiles));
+				break;
+
+			case TREEVIEW_ITEM_TYPE_USER_PROFILE:
+				previousProfileSelection = previousSelection.GetProfilePtr();
+				hChild = reinterpret_cast<HTREEITEM>(
+						SendMessage(
+								hwndTreeView,
+								TVM_GETNEXTITEM,
+								TVGN_CHILD,
+								reinterpret_cast<LPARAM>(tvUserProfiles) ) );
+				itemEx.mask = TVIF_PARAM;
+				while (hChild) {
+					itemEx.hItem = hChild;
+					SendMessage(hwndTreeView, TVM_GETITEM, 0, reinterpret_cast<LPARAM>(&itemEx));
+					tvItem = reinterpret_cast<TreeViewItem *>(itemEx.lParam);
+					if ( tvItem && (tvItem->GetProfilePtr() == previousProfileSelection) ) {
+						SendMessage(hwndTreeView, TVM_SELECTITEM, TVGN_CARET, reinterpret_cast<LPARAM>(hChild));
+						break;
+					}
+					hChild = reinterpret_cast<HTREEITEM>(
+							SendMessage(
+									hwndTreeView,
+									TVM_GETNEXTITEM,
+									TVGN_NEXT,
+									reinterpret_cast<LPARAM>(hChild) ) );
+				}
+				if ( 0 == hChild ) {
+					SendMessage(hwndTreeView, TVM_SELECTITEM, TVGN_CARET, reinterpret_cast<LPARAM>(tvUserProfiles));
+				}
+				break;
+
+			case TREEVIEW_ITEM_TYPE_SYSTEM_PROFILE:
+				previousProfileSelection = previousSelection.GetProfilePtr();
+				hChild = reinterpret_cast<HTREEITEM>(
+						SendMessage(
+								hwndTreeView,
+								TVM_GETNEXTITEM,
+								TVGN_CHILD,
+								reinterpret_cast<LPARAM>(tvSystemProfiles) ) );
+				itemEx.mask = TVIF_PARAM;
+				while (hChild) {
+					itemEx.hItem = hChild;
+					SendMessage(hwndTreeView, TVM_GETITEM, 0, reinterpret_cast<LPARAM>(&itemEx));
+					tvItem = reinterpret_cast<TreeViewItem *>(itemEx.lParam);
+					if ( tvItem && (tvItem->GetProfilePtr() == previousProfileSelection) ) {
+						SendMessage(hwndTreeView, TVM_SELECTITEM, TVGN_CARET, reinterpret_cast<LPARAM>(hChild));
+						break;
+					}
+					hChild = reinterpret_cast<HTREEITEM>(
+							SendMessage(
+									hwndTreeView,
+									TVM_GETNEXTITEM,
+									TVGN_NEXT,
+									reinterpret_cast<LPARAM>(hChild) ) );
+				}
+				if ( 0 == hChild ) {
+					SendMessage(hwndTreeView, TVM_SELECTITEM, TVGN_CARET, reinterpret_cast<LPARAM>(tvSystemProfiles));
+				}
+				break;
+		}
+		resetting = false;
+	}
+}
+
 // Build the TreeView
 //
 void MonitorPage::BuildTreeView(void) {
@@ -109,6 +226,33 @@ void MonitorPage::BuildTreeView(void) {
 	wchar_t buf[1024];
 	TreeViewItem * tiObject = 0;
 
+#if 0
+	HIMAGELIST hImageList;
+	HBITMAP hBitmap;
+	hImageList = ImageList_Create(16, 16, ILC_COLOR24 | ILC_MASK, 3, 1);
+	//hImageList = ImageList_Create(16, 16, ILC_COLOR24, 1, 1);
+	if (hImageList) {
+
+		hBitmap = reinterpret_cast<HBITMAP>(LoadImage(g_hInst, MAKEINTRESOURCE(IDB_BITMAP1), IMAGE_BITMAP, 16, 16, LR_CREATEDIBSECTION));
+		ImageList_AddMasked(hImageList, hBitmap, 0);
+		DeleteObject(hBitmap);
+
+		//HMODULE hShell32 = LoadLibrary(L"shell32.dll");
+		//hBitmap = reinterpret_cast<HBITMAP>(LoadImage(hShell32, MAKEINTRESOURCE(243), IMAGE_ICON, 16, 16, LR_CREATEDIBSECTION));
+		hBitmap = reinterpret_cast<HBITMAP>(LoadImage(g_hInst, MAKEINTRESOURCE(IDB_BITMAP2), IMAGE_BITMAP, 16, 16, LR_CREATEDIBSECTION));
+		ImageList_AddMasked(hImageList, hBitmap, 0);
+		DeleteObject(hBitmap);
+
+		hBitmap = reinterpret_cast<HBITMAP>(LoadImage(g_hInst, MAKEINTRESOURCE(IDB_BITMAP3), IMAGE_BITMAP, 16, 16, LR_CREATEDIBSECTION));
+		ImageList_AddMasked(hImageList, hBitmap, 0);
+		DeleteObject(hBitmap);
+
+		//ImageList_Add(hImageList, hBitmap, 0);
+		SendMessage(hwndTreeView, TVM_SETIMAGELIST, TVSIL_NORMAL, reinterpret_cast<LPARAM>(hImageList));
+	}
+#endif
+
+#if 1
 	// For Vista and later, turn on double-buffering (offscreen bitmap drawing)
 	//
 	if (VistaOrHigher()) {
@@ -117,18 +261,23 @@ void MonitorPage::BuildTreeView(void) {
 #endif
 		SendMessage(hwndTreeView, TVM_SETEXTENDEDSTYLE, TVS_EX_DOUBLEBUFFER, TVS_EX_DOUBLEBUFFER);
 	}
+#endif
 
 	TVINSERTSTRUCT tvInsertStruct;
 	SecureZeroMemory(&tvInsertStruct, sizeof(tvInsertStruct));
 	tvInsertStruct.hInsertAfter = TVI_ROOT;
+	//tvInsertStruct.itemex.mask = TVIF_TEXT | TVIF_PARAM | TVIF_IMAGE | TVIF_SELECTEDIMAGE;
+	//tvInsertStruct.itemex.iImage = 0;
+	//tvInsertStruct.itemex.iSelectedImage = 0;
 	tvInsertStruct.itemex.mask = TVIF_TEXT | TVIF_PARAM;
 	tvInsertStruct.itemex.state = TVIS_BOLD;
 	tvInsertStruct.itemex.stateMask = TVIS_BOLD;
 	StringCbCopy(buf, sizeof(buf), monitor->GetDeviceString().c_str());
 	tvInsertStruct.itemex.pszText = buf;
-	tiObject = AddTreeViewItem(new TreeViewItem(TREEVIEW_ITEM_TYPE_MONITOR, tvInsertStruct.itemex.pszText)); 
+	tiObject = AddTreeViewItem(new TreeViewItem(TREEVIEW_ITEM_TYPE_MONITOR));
 	tvInsertStruct.itemex.lParam = reinterpret_cast<LPARAM>(tiObject);
 	tvRoot = reinterpret_cast<HTREEITEM>( SendMessage(hwndTreeView, TVM_INSERTITEM, 0, reinterpret_cast<LPARAM>(&tvInsertStruct)) );
+	//tvInsertStruct.itemex.mask = TVIF_TEXT | TVIF_PARAM;
 	tiObject->SetHTREEITEM(tvRoot);
 	tiObject->SetMonitor(monitor);
 
@@ -140,29 +289,37 @@ void MonitorPage::BuildTreeView(void) {
 		tvInsertStruct.hParent = tvRoot;
 		tvInsertStruct.hInsertAfter = TVI_LAST;
 		if (hiliteUser) {
+			//tvInsertStruct.itemex.mask = TVIF_TEXT | TVIF_PARAM | TVIF_STATE | TVIF_IMAGE | TVIF_SELECTEDIMAGE;
 			tvInsertStruct.itemex.mask = TVIF_TEXT | TVIF_PARAM | TVIF_STATE;
 		}
+		tvInsertStruct.itemex.iImage = 1;
+		tvInsertStruct.itemex.iSelectedImage = 1;
 		tvInsertStruct.itemex.pszText = L"User profiles";
-		tiObject = AddTreeViewItem(new TreeViewItem(TREEVIEW_ITEM_TYPE_USER_PROFILES, tvInsertStruct.itemex.pszText)); 
+		tiObject = AddTreeViewItem(new TreeViewItem(TREEVIEW_ITEM_TYPE_USER_PROFILES));
 		tvInsertStruct.itemex.lParam = reinterpret_cast<LPARAM>(tiObject);
 		tvUserProfiles = reinterpret_cast<HTREEITEM>( SendMessage(hwndTreeView, TVM_INSERTITEM, 0, reinterpret_cast<LPARAM>(&tvInsertStruct)) );
 		tiObject->SetHTREEITEM(tvUserProfiles);
+		//tvInsertStruct.itemex.mask = TVIF_TEXT | TVIF_PARAM | TVIF_IMAGE | TVIF_SELECTEDIMAGE;
 		tvInsertStruct.itemex.mask = TVIF_TEXT | TVIF_PARAM;
+		tvInsertStruct.itemex.iImage = 2;
+		tvInsertStruct.itemex.iSelectedImage = 2;
 
 		profileList = monitor->GetProfileList(true);
 		count = profileList.size();
 		tvInsertStruct.hParent = tvUserProfiles;
 		for (size_t i = 0; i < count; ++i) {
 			if ( profileList[i] == monitor->GetUserProfile() ) {
+				//tvInsertStruct.itemex.mask = TVIF_TEXT | TVIF_PARAM | TVIF_STATE | TVIF_IMAGE | TVIF_SELECTEDIMAGE;
 				tvInsertStruct.itemex.mask = TVIF_TEXT | TVIF_PARAM | TVIF_STATE;
 			}
 			StringCbCopy(buf, sizeof(buf), profileList[i]->GetName().c_str());
 			tvInsertStruct.itemex.pszText = buf;
-			tiObject = AddTreeViewItem(new TreeViewItem(TREEVIEW_ITEM_TYPE_USER_PROFILE, tvInsertStruct.itemex.pszText)); 
+			tiObject = AddTreeViewItem(new TreeViewItem(TREEVIEW_ITEM_TYPE_USER_PROFILE));
 			tvInsertStruct.itemex.lParam = reinterpret_cast<LPARAM>(tiObject);
 			tvItem = reinterpret_cast<HTREEITEM>( SendMessage(hwndTreeView, TVM_INSERTITEM, 0, reinterpret_cast<LPARAM>(&tvInsertStruct)) );
 			tiObject->SetHTREEITEM(tvItem);
 			tiObject->SetProfile(profileList[i]);
+			//tvInsertStruct.itemex.mask = TVIF_TEXT | TVIF_PARAM | TVIF_IMAGE | TVIF_SELECTEDIMAGE;
 			tvInsertStruct.itemex.mask = TVIF_TEXT | TVIF_PARAM;
 		}
 		SendMessage(hwndTreeView, TVM_SORTCHILDREN, FALSE, reinterpret_cast<LPARAM>(tvUserProfiles));
@@ -172,7 +329,7 @@ void MonitorPage::BuildTreeView(void) {
 			tvInsertStruct.itemex.mask = TVIF_TEXT | TVIF_PARAM | TVIF_STATE;
 		}
 		tvInsertStruct.itemex.pszText = L"System profiles";
-		tiObject = AddTreeViewItem(new TreeViewItem(TREEVIEW_ITEM_TYPE_SYSTEM_PROFILES, tvInsertStruct.itemex.pszText)); 
+		tiObject = AddTreeViewItem(new TreeViewItem(TREEVIEW_ITEM_TYPE_SYSTEM_PROFILES));
 		tvInsertStruct.itemex.lParam = reinterpret_cast<LPARAM>(tiObject);
 		tvSystemProfiles = reinterpret_cast<HTREEITEM>( SendMessage(hwndTreeView, TVM_INSERTITEM, 0, reinterpret_cast<LPARAM>(&tvInsertStruct)) );
 		tiObject->SetHTREEITEM(tvSystemProfiles);
@@ -187,7 +344,7 @@ void MonitorPage::BuildTreeView(void) {
 			}
 			StringCbCopy(buf, sizeof(buf), profileList[i]->GetName().c_str());
 			tvInsertStruct.itemex.pszText = buf;
-			tiObject = AddTreeViewItem(new TreeViewItem(TREEVIEW_ITEM_TYPE_SYSTEM_PROFILE, tvInsertStruct.itemex.pszText)); 
+			tiObject = AddTreeViewItem(new TreeViewItem(TREEVIEW_ITEM_TYPE_SYSTEM_PROFILE));
 			tvInsertStruct.itemex.lParam = reinterpret_cast<LPARAM>(tiObject);
 			tvItem = reinterpret_cast<HTREEITEM>( SendMessage(hwndTreeView, TVM_INSERTITEM, 0, reinterpret_cast<LPARAM>(&tvInsertStruct)) );
 			tiObject->SetHTREEITEM(tvItem);
@@ -202,7 +359,7 @@ void MonitorPage::BuildTreeView(void) {
 		//
 		tvInsertStruct.hParent = tvRoot;
 		tvInsertStruct.itemex.pszText = L"Profiles";
-		tiObject = AddTreeViewItem(new TreeViewItem(TREEVIEW_ITEM_TYPE_PROFILES, tvInsertStruct.itemex.pszText)); 
+		tiObject = AddTreeViewItem(new TreeViewItem(TREEVIEW_ITEM_TYPE_PROFILES));
 		tvInsertStruct.itemex.lParam = reinterpret_cast<LPARAM>(tiObject);
 		tvSystemProfiles = reinterpret_cast<HTREEITEM>( SendMessage(hwndTreeView, TVM_INSERTITEM, 0, reinterpret_cast<LPARAM>(&tvInsertStruct)) );
 		tiObject->SetHTREEITEM(tvSystemProfiles);
@@ -216,7 +373,7 @@ void MonitorPage::BuildTreeView(void) {
 			}
 			StringCbCopy(buf, sizeof(buf), profileList[i]->GetName().c_str());
 			tvInsertStruct.itemex.pszText = buf;
-			tiObject = AddTreeViewItem(new TreeViewItem(TREEVIEW_ITEM_TYPE_SYSTEM_PROFILE, tvInsertStruct.itemex.pszText)); 
+			tiObject = AddTreeViewItem(new TreeViewItem(TREEVIEW_ITEM_TYPE_SYSTEM_PROFILE));
 			tvInsertStruct.itemex.lParam = reinterpret_cast<LPARAM>(tiObject);
 			tvItem = reinterpret_cast<HTREEITEM>( SendMessage(hwndTreeView, TVM_INSERTITEM, 0, reinterpret_cast<LPARAM>(&tvInsertStruct)) );
 			tiObject->SetHTREEITEM(tvItem);
@@ -225,7 +382,9 @@ void MonitorPage::BuildTreeView(void) {
 		}
 		SendMessage(hwndTreeView, TVM_SORTCHILDREN, FALSE, reinterpret_cast<LPARAM>(tvSystemProfiles));
 	}
-	SendMessage(hwndTreeView, TVM_EXPAND, TVE_EXPAND, reinterpret_cast<LPARAM>(tvRoot));
+	if ( !resetting ) {
+		SendMessage(hwndTreeView, TVM_EXPAND, TVE_EXPAND, reinterpret_cast<LPARAM>(tvRoot));
+	}
 }
 
 // Subclass procedure for edit control

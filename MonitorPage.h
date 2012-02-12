@@ -4,6 +4,7 @@
 #pragma once
 #include "stdafx.h"
 #include <commctrl.h>		// For HTREEITEM
+//#include "TreeViewItem.h"
 
 // Forward references
 //

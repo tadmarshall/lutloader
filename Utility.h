@@ -18,7 +18,11 @@ typedef enum tag_FONT_CLASS {
 } FONT_CLASS;
 
 wstring HexDump(const LPBYTE data, size_t size, size_t rowWidth);
-wstring ShowError(const wchar_t * functionName, const wchar_t * preMessageText = 0, const wchar_t * postMessageText = 0);
+wstring ShowError(
+		const wchar_t * functionName,
+		const LONG errorReturn = 0,
+		const wchar_t * preMessageText = 0,
+		const wchar_t * postMessageText = 0 );
 bool VistaOrHigher(void);
 const wchar_t * LookupName(
 	const __in __ecount(tableSize) NAME_LOOKUP * nameTable,

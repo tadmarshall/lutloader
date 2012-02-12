@@ -44,7 +44,7 @@ void FetchColorDirectory(void) {
 		ColorDirectory = new wchar_t[filepathSize];
 		StringCchCopy(ColorDirectory, filepathSize, filepath);
 	} else {
-		wstring s = ShowError(L"GetColorDirectoryW", L"Cannot get name of directory for profile files\r\n");
+		wstring s = ShowError(L"GetColorDirectoryW", 0, L"Cannot get name of directory for profile files\r\n");
 		size_t len = 1 + s.size();
 		ColorDirectoryErrorString = new wchar_t[len];
 		StringCchCopy(ColorDirectoryErrorString, len, s.c_str());

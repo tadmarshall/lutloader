@@ -9,14 +9,13 @@
 #define IDS_EXCEPTION                   105
 #define IDB_BITMAP1                     106
 #define IDB_BITMAP2                     107
-#define IDR_LUTVIEW_POPUP_MENU          108
+#define IDB_BITMAP3                     108
+#define IDR_LUTVIEW_POPUP_MENU          199
 #define IDD_SUMMARY_PAGE_XP             200
 #define IDD_SUMMARY_PAGE_VISTA          201
 #define IDD_MONITOR_PAGE_XP             202
 #define IDD_MONITOR_PAGE_VISTA          203
 #define IDI_ICON_SETUPAPI_35            300
-#define IDI_ICON_BLANK                  301
-#define IDI_BACKCOLOR                   302
 #define IDC_SUMMARY_TEXT                1001
 #define IDC_MONITOR_TEXT                1002
 #define IDC_ORIGINAL_SIZE               1003

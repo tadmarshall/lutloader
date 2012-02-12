@@ -261,16 +261,27 @@ Profile * Profile::GetAllProfiles(HKEY hKeyBase, const wchar_t * registryKey, bo
 	return profile;
 }
 
-bool Profile::SetDefaultProfile(HKEY hKeyBase, const wchar_t * registryKey, wstring & errorString) {
+// Set the default profile in the registry for some monitor.  This is done by moving a profile
+// name to the end of a REG_MULTI_SZ (but perhaps stored as REG_BINARY) value in a location
+// provided by our caller.
+//
+bool Profile::SetDefaultProfile(HKEY hKeyBase, const wchar_t * registryKey) {
 	wchar_t profileName[1024];
 	HKEY hKey;
 	DWORD dataSize;
 	DWORD dataType;
 	bool success = false;
-	errorString.clear();
 
 	StringCbCopy(profileName, sizeof(profileName), ProfileName.c_str());
+#if 0
+	LONG lStatus = RegOpenKeyEx(hKeyBase, registryKey, 0, KEY_ALL_ACCESS, &hKey);
+	if (ERROR_SUCCESS != lStatus) {
+		wstring errorString = ShowError(L"RegOpenKeyEx", lStatus);
+		errorString += L"\r\n";
+	} else {
+#else
 	if (ERROR_SUCCESS == RegOpenKeyEx(hKeyBase, registryKey, 0, KEY_QUERY_VALUE | KEY_SET_VALUE, &hKey)) {
+#endif
 		if (ERROR_SUCCESS == RegQueryValueEx(hKey, L"ICMProfile", NULL, NULL, NULL, &dataSize)) {
 			dataSize += 2 * sizeof(wchar_t);
 			BYTE * fromList = reinterpret_cast<BYTE *>(malloc(dataSize));
@@ -425,7 +436,7 @@ wstring Profile::LoadFullProfile(bool forceReload) {
 		wstring message = L"Cannot open profile file \"";
 		message += filepath;
 		message += L"\".\r\n";
-		ErrorString += ShowError(L"CreateFile", message.c_str());
+		ErrorString += ShowError(L"CreateFile", 0, message.c_str());
 		return ErrorString;
 	}
 
@@ -436,7 +447,7 @@ wstring Profile::LoadFullProfile(bool forceReload) {
 		wstring message = L"Cannot determine the size of profile file \"";
 		message += filepath;
 		message += L"\".\r\n";
-		ErrorString += ShowError(L"GetFileSizeEx", message.c_str());
+		ErrorString += ShowError(L"GetFileSizeEx", 0, message.c_str());
 		CloseHandle(hFile);
 		return ErrorString;
 	}
@@ -468,7 +479,7 @@ wstring Profile::LoadFullProfile(bool forceReload) {
 		wstring message = L"Cannot read header of profile file \"";
 		message += filepath;
 		message += L"\".\r\n";
-		ErrorString += ShowError(L"ReadFile", message.c_str());
+		ErrorString += ShowError(L"ReadFile", 0, message.c_str());
 		CloseHandle(hFile);
 		return ErrorString;
 	}
@@ -510,7 +521,7 @@ wstring Profile::LoadFullProfile(bool forceReload) {
 		wstring message = L"Cannot read tag count from profile file \"";
 		message += filepath;
 		message += L"\".\r\n";
-		ErrorString += ShowError(L"ReadFile", message.c_str());
+		ErrorString += ShowError(L"ReadFile", 0, message.c_str());
 		CloseHandle(hFile);
 		return ErrorString;
 	}
@@ -560,7 +571,7 @@ wstring Profile::LoadFullProfile(bool forceReload) {
 		wstring message = L"Cannot read tag table (directory) from profile file \"";
 		message += filepath;
 		message += L"\".\r\n";
-		ErrorString += ShowError(L"ReadFile", message.c_str());
+		ErrorString += ShowError(L"ReadFile", 0, message.c_str());
 		CloseHandle(hFile);
 		return ErrorString;
 	}
@@ -612,7 +623,7 @@ wstring Profile::LoadFullProfile(bool forceReload) {
 			wstring message = L"Cannot read 'vcgt' tag from profile file \"";
 			message += filepath;
 			message += L"\".\r\n";
-			ErrorString += ShowError(L"SetFilePointerEx", message.c_str());
+			ErrorString += ShowError(L"SetFilePointerEx", 0, message.c_str());
 			CloseHandle(hFile);
 			return ErrorString;
 		}
@@ -622,7 +633,7 @@ wstring Profile::LoadFullProfile(bool forceReload) {
 			wstring message = L"Cannot read 'vcgt' tag from profile file \"";
 			message += filepath;
 			message += L"\".\r\n";
-			ErrorString += ShowError(L"ReadFile", message.c_str());
+			ErrorString += ShowError(L"ReadFile", 0, message.c_str());
 			CloseHandle(hFile);
 			return ErrorString;
 		}
@@ -892,7 +903,7 @@ wstring Profile::LoadFullProfile(bool forceReload) {
 			wstring message = L"Cannot read 'MS00' tag from profile file \"";
 			message += filepath;
 			message += L"\".\r\n";
-			ErrorString += ShowError(L"SetFilePointerEx", message.c_str());
+			ErrorString += ShowError(L"SetFilePointerEx", 0, message.c_str());
 			CloseHandle(hFile);
 			return ErrorString;
 		}

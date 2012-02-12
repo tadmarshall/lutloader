@@ -41,10 +41,10 @@ wstring HexDump(const LPBYTE data, size_t size, size_t rowWidth) {
 
 // Return a string showing failure of the last system call
 //
-wstring ShowError(const wchar_t * functionName, const wchar_t * preMessageText, const wchar_t * postMessageText) {
+wstring ShowError(const wchar_t * functionName, const LONG errorReturn, const wchar_t * preMessageText, const wchar_t * postMessageText) {
 	wstring s;
 	wchar_t buf[1024];
-	DWORD err = GetLastError();
+	DWORD err = errorReturn ? errorReturn : GetLastError();
 	if (preMessageText) {
 		s += preMessageText;
 	}

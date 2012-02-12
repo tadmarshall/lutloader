@@ -396,6 +396,19 @@ HWND MonitorSummaryItem::CreateMonitorSummaryItemWindow(
 				this );
 		SetWindowLongPtr(hwndLoadLutButton, GWLP_ID, IDC_LOAD_BUTTON);
 
+#if 0
+//#ifndef BCM_FIRST
+//#define BCM_FIRST               0x1600      // Button control messages
+//#endif
+
+#ifndef BCM_SETSHIELD
+// Macro to use on a button or command link to display an elevated icon
+#define BCM_SETSHIELD            (BCM_FIRST + 0x000C)
+#endif
+
+		SendMessage(hwndLoadLutButton, BCM_SETSHIELD, 0, TRUE);
+#endif
+
 		HDC hdc = GetDC(hwndLoadLutButton);
 		HFONT hFont = GetFont(hdc, FC_DIALOG, true);
 		ReleaseDC(hwndLoadLutButton, hdc);

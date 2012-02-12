@@ -29,6 +29,8 @@ public:
 			int width,
 			int height
 	);
+	void SetGraphDisplayStyle(LUT_GRAPH_DISPLAY_STYLE style);
+	LUT_GRAPH_DISPLAY_STYLE GetGraphDisplayStyle(void);
 	void SetText(wstring newText);
 	void SetLUT(LUT * lutPointer);
 	void SetUpdateBitmap(void);

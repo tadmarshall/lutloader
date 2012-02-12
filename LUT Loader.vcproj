@@ -80,6 +80,8 @@
 			/>
 			<Tool
 				Name="VCManifestTool"
+				AdditionalManifestFiles="AssemblyIdentity.manifest;DeclareDPIAware.manifest;DeclareUAC.manifest"
+				SuppressStartupBanner="false"
 			/>
 			<Tool
 				Name="VCXDCMakeTool"
@@ -162,6 +164,8 @@
 			/>
 			<Tool
 				Name="VCManifestTool"
+				AdditionalManifestFiles="AssemblyIdentity.manifest;DeclareDPIAware.manifest;DeclareUAC.manifest"
+				SuppressStartupBanner="false"
 			/>
 			<Tool
 				Name="VCXDCMakeTool"
@@ -239,6 +243,8 @@
 			/>
 			<Tool
 				Name="VCManifestTool"
+				AdditionalManifestFiles="AssemblyIdentity.manifest;DeclareDPIAware.manifest;DeclareUAC.manifest"
+				SuppressStartupBanner="false"
 			/>
 			<Tool
 				Name="VCXDCMakeTool"
@@ -317,6 +323,8 @@
 			/>
 			<Tool
 				Name="VCManifestTool"
+				AdditionalManifestFiles="AssemblyIdentity.manifest;DeclareDPIAware.manifest;DeclareUAC.manifest"
+				SuppressStartupBanner="false"
 			/>
 			<Tool
 				Name="VCXDCMakeTool"
@@ -467,11 +475,19 @@
 			UniqueIdentifier="{67DA6AB6-F800-4c08-8B7A-83BB121AAD01}"
 			>
 			<File
-				RelativePath=".\BackColo.Ico"
+				RelativePath=".\AssemblyIdentity.manifest"
 				>
 			</File>
 			<File
-				RelativePath=".\icon1.ico"
+				RelativePath=".\Blank document2.bmp"
+				>
+			</File>
+			<File
+				RelativePath=".\DeclareDPIAware.manifest"
+				>
+			</File>
+			<File
+				RelativePath=".\DeclareUAC.manifest"
 				>
 			</File>
 			<File
@@ -479,7 +495,15 @@
 				>
 			</File>
 			<File
+				RelativePath=".\Monitor bitmap from setupapi-dll.bmp"
+				>
+			</File>
+			<File
 				RelativePath=".\setupapi_35.ico"
+				>
+			</File>
+			<File
+				RelativePath=".\Several documents.bmp"
 				>
 			</File>
 		</Filter>

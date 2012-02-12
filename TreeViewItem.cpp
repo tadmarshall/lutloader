@@ -16,9 +16,10 @@ extern HINSTANCE g_hInst;
 
 // Constructor
 //
-TreeViewItem::TreeViewItem(TREEVIEW_ITEM_TYPE itemType, const wchar_t * tviText) :
+TreeViewItem::TreeViewItem(TREEVIEW_ITEM_TYPE itemType) :
+//TreeViewItem::TreeViewItem(TREEVIEW_ITEM_TYPE itemType, const wchar_t * tviText) :
 		ItemType(itemType),
-		ItemText(tviText),
+		//ItemText(tviText),
 		MonitorPtr(0),
 		ProfilePtr(0),
 		hTreeItem(0)
@@ -35,6 +36,14 @@ void TreeViewItem::SetMonitor(Monitor * monitor) {
 
 void TreeViewItem::SetProfile(Profile * profile) {
 	ProfilePtr = profile;
+}
+
+int TreeViewItem::GetItemType(void) const {
+	return ItemType;
+}
+
+Profile * TreeViewItem::GetProfilePtr(void) const {
+	return ProfilePtr;
 }
 
 void TreeViewItem::Handle_TVN_SELCHANGEDW(MonitorPage * monitorPage, NMTREEVIEWW * pNMTREEVIEWW) {
@@ -149,10 +158,10 @@ void TreeViewItem::ProfileContextMenu(MonitorPage * monitorPage, POINT * screenC
 	flags = TPM_LEFTALIGN | TPM_TOPALIGN | TPM_NONOTIFY | TPM_RETURNCMD | TPM_RIGHTBUTTON | TPM_NOANIMATION;
 	id = TrackPopupMenuEx(hPopup, flags, screenClickPoint->x, screenClickPoint->y, monitorPage->GetHwnd(), NULL);
 
+	HWND hwndTreeView = monitorPage->GetTreeViewHwnd();
 	if ( ID_SET_DEFAULT_PROFILE == id ) {
-		wstring errorString;
 		ProfilePtr->LoadFullProfile(false);
-		monitor->SetDefaultProfile(ProfilePtr, isUser, errorString);
+		bool success = monitor->SetDefaultProfile(ProfilePtr, isUser);
 		if ( isUser == monitor->GetActiveProfileIsUserProfile() ) {
 			pProfileLUT = ProfilePtr->GetLutPointer();
 			if ( pProfileLUT ) {
@@ -170,48 +179,54 @@ void TreeViewItem::ProfileContextMenu(MonitorPage * monitorPage, POINT * screenC
 			}
 		}
 
-		// Unbold the currently bold item, make ourselves bold
+		// If we don't have Administrator privileges and we hit the system profile,
+		// then we didn't actually change the setting (we just loaded the LUT)
 		//
-		HWND hwndTreeView = monitorPage->GetTreeViewHwnd();
-		HTREEITEM hParent = reinterpret_cast<HTREEITEM>(
-				SendMessage(
-						hwndTreeView,
-						TVM_GETNEXTITEM,
-						TVGN_PARENT,
-						reinterpret_cast<LPARAM>(hTreeItem) ) );
-		HTREEITEM hChild = reinterpret_cast<HTREEITEM>(
-				SendMessage(
-						hwndTreeView,
-						TVM_GETNEXTITEM,
-						TVGN_CHILD,
-						reinterpret_cast<LPARAM>(hParent) ) );
-		TVITEMEX itemEx;
-		SecureZeroMemory(&itemEx, sizeof(itemEx));
-		itemEx.mask = TVIF_HANDLE | TVIF_STATE;
-		while (hChild) {
-			if ( hChild != hTreeItem ) {
-				itemEx.hItem = hChild;
-				itemEx.state = TVIS_BOLD;
-				itemEx.stateMask = TVIS_BOLD;
-				SendMessage(hwndTreeView, TVM_GETITEM, 0, reinterpret_cast<LPARAM>(&itemEx));
-				if ( 0 != (itemEx.state & TVIS_BOLD) ) {
-					itemEx.state = 0;
-					itemEx.stateMask = TVIS_BOLD;
-					SendMessage(hwndTreeView, TVM_SETITEM, 0, reinterpret_cast<LPARAM>(&itemEx));
-				}
-			}
-			hChild = reinterpret_cast<HTREEITEM>(
+		if (success) {
+
+			// Unbold the currently bold item, make ourselves bold
+			//
+			HTREEITEM hParent = reinterpret_cast<HTREEITEM>(
 					SendMessage(
 							hwndTreeView,
 							TVM_GETNEXTITEM,
-							TVGN_NEXT,
-							reinterpret_cast<LPARAM>(hChild) ) );
+							TVGN_PARENT,
+							reinterpret_cast<LPARAM>(hTreeItem) ) );
+			HTREEITEM hChild = reinterpret_cast<HTREEITEM>(
+					SendMessage(
+							hwndTreeView,
+							TVM_GETNEXTITEM,
+							TVGN_CHILD,
+							reinterpret_cast<LPARAM>(hParent) ) );
+			TVITEMEX itemEx;
+			SecureZeroMemory(&itemEx, sizeof(itemEx));
+			itemEx.mask = TVIF_HANDLE | TVIF_STATE;
+			while (hChild) {
+				if ( hChild != hTreeItem ) {
+					itemEx.hItem = hChild;
+					itemEx.state = TVIS_BOLD;
+					itemEx.stateMask = TVIS_BOLD;
+					SendMessage(hwndTreeView, TVM_GETITEM, 0, reinterpret_cast<LPARAM>(&itemEx));
+					if ( 0 != (itemEx.state & TVIS_BOLD) ) {
+						itemEx.state = 0;
+						itemEx.stateMask = TVIS_BOLD;
+						SendMessage(hwndTreeView, TVM_SETITEM, 0, reinterpret_cast<LPARAM>(&itemEx));
+					}
+				}
+				hChild = reinterpret_cast<HTREEITEM>(
+						SendMessage(
+								hwndTreeView,
+								TVM_GETNEXTITEM,
+								TVGN_NEXT,
+								reinterpret_cast<LPARAM>(hChild) ) );
+			}
+			itemEx.hItem = hTreeItem;
+			itemEx.state = TVIS_BOLD;
+			itemEx.stateMask = TVIS_BOLD;
+			SendMessage(hwndTreeView, TVM_SETITEM, 0, reinterpret_cast<LPARAM>(&itemEx));
 		}
-		itemEx.hItem = hTreeItem;
-		itemEx.state = TVIS_BOLD;
-		itemEx.stateMask = TVIS_BOLD;
-		SendMessage(hwndTreeView, TVM_SETITEM, 0, reinterpret_cast<LPARAM>(&itemEx));
-		SendMessage(hwndTreeView, TVM_SELECTITEM, TVGN_CARET, reinterpret_cast<LPARAM>(hTreeItem));
+
 	}
+	SendMessage(hwndTreeView, TVM_SELECTITEM, TVGN_CARET, reinterpret_cast<LPARAM>(hTreeItem));
 	DestroyMenu(hPopup);
 }

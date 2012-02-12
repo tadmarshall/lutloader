@@ -283,6 +283,14 @@ HWND LUTview::CreateLUTviewWindow(
 	return hwnd;
 }
 
+void LUTview::SetGraphDisplayStyle(LUT_GRAPH_DISPLAY_STYLE style) {
+	graphDisplayStyle = style;
+}
+
+LUT_GRAPH_DISPLAY_STYLE LUTview::GetGraphDisplayStyle(void) {
+	return graphDisplayStyle;
+}
+
 void LUTview::SetText(wstring newText) {
 	displayText = newText;
 }

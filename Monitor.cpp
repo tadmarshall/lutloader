@@ -114,7 +114,7 @@ void Monitor::Initialize(void) {
 	SystemProfile = Profile::GetAllProfiles(HKEY_LOCAL_MACHINE, registryKey, 0, SystemProfileList);
 }
 
-bool Monitor::SetDefaultProfile(Profile * profile, bool userProfile, wstring & errorString) {
+bool Monitor::SetDefaultProfile(Profile * profile, bool userProfile) {
 	wchar_t registryKey[1024];
 	int len;
 	bool success;
@@ -123,12 +123,12 @@ bool Monitor::SetDefaultProfile(Profile * profile, bool userProfile, wstring & e
 		StringCbCopy( registryKey, sizeof(registryKey),
 			L"Software\\Microsoft\\Windows NT\\CurrentVersion\\ICM\\ProfileAssociations\\Display");
 		StringCbCat(registryKey, sizeof(registryKey), &DeviceKey.c_str()[len]);
-		success = profile->SetDefaultProfile(HKEY_CURRENT_USER, registryKey, errorString);
+		success = profile->SetDefaultProfile(HKEY_CURRENT_USER, registryKey);
 		UserProfile = profile;
 	} else {
 		len = StringLength(L"\\Registry\\Machine\\");
 		StringCbCopy(registryKey, sizeof(registryKey), &DeviceKey.c_str()[len]);
-		success = profile->SetDefaultProfile(HKEY_LOCAL_MACHINE, registryKey, errorString);
+		success = profile->SetDefaultProfile(HKEY_LOCAL_MACHINE, registryKey);
 		SystemProfile = profile;
 	}
 	return success;

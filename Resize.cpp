@@ -31,6 +31,10 @@ static HWND topWindow = 0;
 //
 static SIZE previousTopWindowSize = {0};
 
+// We can't start until the Summary page's WM_INITDIALOG code has restored our WindowPlacement
+//
+//static bool readyToResize = false;
+
 // We need to rebuild the list of child windows on the next resize
 //
 static bool needRebuild = false;

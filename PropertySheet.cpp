@@ -20,6 +20,8 @@
 
 // Some constants
 //
+#define REGISTRY_SUBKEY L"SOFTWARE\\LUT Loader"
+#define GRAPH_DISPLAY_STYLE_NAME L"GraphDisplayStyle"
 #define FINAL_VERTICAL_OFFSET	4					// Scaled by DPI factor
 
 // Symbols defined in other files
@@ -44,6 +46,91 @@ static bool summaryPageWasShown = false;			// Just a flag that the PropertySheet
 static MonitorSummaryItem * testMonitorItem = 0;	// The test MonitorSummaryItem we created
 static HWND hwndTestMonitorItem = 0;				// HWND for test MonitorSummaryItem we created
 #endif
+
+void SaveSettings(HWND hWnd) {
+	HKEY hKey = 0;
+	//if ( ERROR_SUCCESS == RegCreateKeyEx(HKEY_LOCAL_MACHINE, REGISTRY_SUBKEY, 0, 0, 0, KEY_SET_VALUE, 0, &hKey, 0) ) {
+	if ( ERROR_SUCCESS == RegCreateKeyEx(HKEY_CURRENT_USER, REGISTRY_SUBKEY, 0, 0, 0, KEY_SET_VALUE, 0, &hKey, 0) ) {
+		wchar_t buf[256];
+		WINDOWPLACEMENT wp;
+		SecureZeroMemory(&wp, sizeof(wp));
+		wp.length = sizeof(wp);
+		if (GetWindowPlacement(hWnd, &wp)) {
+			StringCbPrintf(buf, sizeof(buf), L"%d,%d,%d,%d,%d,%d",
+					wp.rcNormalPosition.left,
+					wp.rcNormalPosition.top,
+					wp.rcNormalPosition.right,
+					wp.rcNormalPosition.bottom,
+					wp.showCmd,
+					wp.flags );
+			RegSetValueEx(
+					hKey,
+					L"WindowPlacement",
+					NULL,
+					REG_SZ,
+					reinterpret_cast<BYTE *>(buf),
+					sizeof(wchar_t) * (StringLength(buf) + 1) );
+		}
+		if (summaryLutView) {
+			LUT_GRAPH_DISPLAY_STYLE style = summaryLutView->GetGraphDisplayStyle();
+			RegSetValueEx( hKey, GRAPH_DISPLAY_STYLE_NAME, NULL, REG_DWORD, reinterpret_cast<BYTE *>(&style), 4 );
+		}
+		RegCloseKey(hKey);
+	}
+}
+
+void RestoreSettings(HWND hWnd) {
+	HKEY hKey = 0;
+	if (ERROR_SUCCESS == RegOpenKeyEx(HKEY_CURRENT_USER, REGISTRY_SUBKEY, 0, KEY_QUERY_VALUE, &hKey)) {
+		wchar_t buf[256];
+		DWORD dataSize = sizeof(buf);
+		DWORD dataType;
+		SecureZeroMemory(buf, sizeof(buf));
+		WINDOWPLACEMENT wp;
+		SecureZeroMemory(&wp, sizeof(wp));
+		wp.length = sizeof(wp);
+		if (GetWindowPlacement(hWnd, &wp)) {
+			if (ERROR_SUCCESS == RegQueryValueEx(
+					hKey,
+					L"WindowPlacement",
+					NULL,
+					&dataType,
+					reinterpret_cast<BYTE *>(buf),
+					&dataSize)
+			) {
+				if ( (REG_SZ == dataType) && (dataSize > 12) ) {
+					int nRead = swscanf_s(
+							buf,
+							L"%d,%d,%d,%d,%d,%d",
+							&wp.rcNormalPosition.left,
+							&wp.rcNormalPosition.top,
+							&wp.rcNormalPosition.right,
+							&wp.rcNormalPosition.bottom,
+							&wp.showCmd,
+							&wp.flags );
+					if ( 6 == nRead ) {
+
+						// We could do sanity checking on the values here, or just hope that
+						// SetWindowPlacement() fixes anything that is really bad ...
+						//
+						SetWindowPlacement(hWnd, &wp);
+					}
+				}
+			}
+		}
+		if (summaryLutView) {
+			LUT_GRAPH_DISPLAY_STYLE style = LGDS_WHITE;
+			if (ERROR_SUCCESS == RegQueryValueEx( hKey, GRAPH_DISPLAY_STYLE_NAME, NULL, &dataType, reinterpret_cast<BYTE *>(&style), &dataSize )) {
+				if ( (REG_DWORD == dataType) && (4 == dataSize) ) {
+					if ( style >= LGDS_WHITE && style <= LGDS_GRADIENT ) {
+						summaryLutView->SetGraphDisplayStyle(style);
+					}
+				}
+			}
+		}
+		RegCloseKey(hKey);
+	}
+}
 
 // Summary page dialog procedure
 //
@@ -286,6 +373,11 @@ INT_PTR CALLBACK SummaryPageProc(HWND hWnd, UINT uMessage, WPARAM wParam, LPARAM
 			//
 			PostMessage(parent, WM_NEXTDLGCTL, reinterpret_cast<WPARAM>(cancelButton), TRUE);
 
+			// Restore our saved WindowPlacement and other settings, if any
+			//
+			RestoreSettings(parent);
+			Resize::SetNeedRebuild(true);
+
 			return FALSE;
 			break;
 		}
@@ -298,15 +390,15 @@ INT_PTR CALLBACK SummaryPageProc(HWND hWnd, UINT uMessage, WPARAM wParam, LPARAM
 
 		// WM_NOTIFY is sent by our PropertySheet parent
 		//
-		//case WM_NOTIFY:
-		//	NMHDR * pNMHDR;
-		//	pNMHDR = reinterpret_cast<NMHDR *>(lParam);
-		//	PSHNOTIFY * pPSHNOTIFY;
+		case WM_NOTIFY:
+			NMHDR * pNMHDR;
+			pNMHDR = reinterpret_cast<NMHDR *>(lParam);
+			PSHNOTIFY * pPSHNOTIFY;
 
-		//	switch (pNMHDR->code) {
+			switch (pNMHDR->code) {
 
-				// Apply or OK pressed
-				//
+				//// Apply or OK pressed
+				////
 				//case PSN_APPLY:
 				//	pPSHNOTIFY = reinterpret_cast<PSHNOTIFY *>(lParam);
 				//	MessageBox(NULL, L"PSN_APPLY", L"PropertySheet notification", MB_ICONINFORMATION | MB_OK);
@@ -314,34 +406,35 @@ INT_PTR CALLBACK SummaryPageProc(HWND hWnd, UINT uMessage, WPARAM wParam, LPARAM
 
 				// Dialog is closing
 				//
-				//case PSN_RESET:
-				//	pPSHNOTIFY = reinterpret_cast<PSHNOTIFY *>(lParam);
-				//	MessageBox(NULL, L"PSN_RESET", L"PropertySheet notification", MB_ICONINFORMATION | MB_OK);
-				//	break;
+				case PSN_RESET:
+					pPSHNOTIFY = reinterpret_cast<PSHNOTIFY *>(lParam);
+					SaveSettings(GetParent(hWnd));
+					//MessageBox(NULL, L"PSN_RESET", L"PropertySheet notification", MB_ICONINFORMATION | MB_OK);
+					break;
 
-				// Page activated (switched to)
-				//
+				//// Page activated (switched to)
+				////
 				//case PSN_SETACTIVE:
 				//	pPSHNOTIFY = reinterpret_cast<PSHNOTIFY *>(lParam);
 				//	MessageBox(NULL, L"PSN_SETACTIVE", L"PropertySheet notification", MB_ICONINFORMATION | MB_OK);
 				//	break;
 
-				// Leaving page
-				//
+				//// Leaving page
+				////
 				//case PSN_KILLACTIVE:
 				//	pPSHNOTIFY = reinterpret_cast<PSHNOTIFY *>(lParam);
 				//	MessageBox(NULL, L"PSN_KILLACTIVE", L"PropertySheet notification", MB_ICONINFORMATION | MB_OK);
 				//	break;
 
-				// User pressed Cancel
-				//
+				//// User pressed Cancel
+				////
 				//case PSN_QUERYCANCEL:
 				//	pPSHNOTIFY = reinterpret_cast<PSHNOTIFY *>(lParam);
 				//	MessageBox(NULL, L"PSN_QUERYCANCEL", L"PropertySheet notification", MB_ICONINFORMATION | MB_OK);
 				//	break;
 
-			//}
-			//break;
+			}
+			break;
 
 	}
 	return 0;
@@ -394,24 +487,6 @@ INT_PTR CALLBACK PropSheetSubclassProc(HWND hWnd, UINT uMessage, WPARAM wParam, 
 				return 0;
 			}
 			break;
-
-		//case WM_PAINT:
-		//	DWORD dw;
-		//	dw = 0;
-		//	++dw;
-		//	break;
-
-		//case WM_ERASEBKGND:
-		//	DWORD dw2;
-		//	dw2 = 2;
-		//	++dw2;
-		//	break;
-
-		//case WM_NCPAINT:
-		//	DWORD dw3;
-		//	dw3 = 3;
-		//	++dw3;
-		//	break;
 
 	}
 	return CallWindowProc(oldPropSheetWindowProc, hWnd, uMessage, wParam, lParam);
