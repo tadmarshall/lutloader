@@ -19,8 +19,8 @@
 	<Configurations>
 		<Configuration
 			Name="Debug|Win32"
-			OutputDirectory="$(SolutionDir)$(ConfigurationName)"
-			IntermediateDirectory="$(ConfigurationName)"
+			OutputDirectory="$(SolutionDir)$(PlatformName)\$(ConfigurationName)"
+			IntermediateDirectory="$(PlatformName)\$(ConfigurationName)"
 			ConfigurationType="1"
 			CharacterSet="1"
 			>
@@ -52,6 +52,8 @@
 				RuntimeLibrary="1"
 				EnableFunctionLevelLinking="true"
 				RuntimeTypeInfo="false"
+				UsePrecompiledHeader="2"
+				PrecompiledHeaderFile="$(IntDir)\StdAfx.pch"
 				WarningLevel="4"
 				WarnAsError="false"
 				SuppressStartupBanner="true"
@@ -71,7 +73,7 @@
 				Name="VCLinkerTool"
 				AdditionalOptions="/nxcompat /dynamicbase"
 				OutputFile="$(OutDir)\LUTLoader.exe"
-				Version="1.0"
+				Version="0.7"
 				LinkIncremental="1"
 				SuppressStartupBanner="true"
 				AdditionalManifestDependencies=""
@@ -139,6 +141,9 @@
 				BasicRuntimeChecks="3"
 				RuntimeLibrary="1"
 				EnableFunctionLevelLinking="true"
+				RuntimeTypeInfo="false"
+				UsePrecompiledHeader="2"
+				PrecompiledHeaderFile="$(IntDir)\StdAfx.pch"
 				WarningLevel="4"
 				WarnAsError="false"
 				SuppressStartupBanner="true"
@@ -157,7 +162,7 @@
 				Name="VCLinkerTool"
 				AdditionalOptions="/nxcompat /dynamicbase"
 				OutputFile="$(OutDir)\LUTLoader.exe"
-				Version="1.0"
+				Version="0.7"
 				LinkIncremental="1"
 				SuppressStartupBanner="true"
 				AdditionalManifestDependencies=""
@@ -196,8 +201,8 @@
 		</Configuration>
 		<Configuration
 			Name="Release|Win32"
-			OutputDirectory="$(SolutionDir)$(ConfigurationName)"
-			IntermediateDirectory="$(ConfigurationName)"
+			OutputDirectory="$(SolutionDir)$(PlatformName)\$(ConfigurationName)"
+			IntermediateDirectory="$(PlatformName)\$(ConfigurationName)"
 			ConfigurationType="1"
 			CharacterSet="1"
 			WholeProgramOptimization="1"
@@ -225,6 +230,8 @@
 				RuntimeLibrary="0"
 				EnableFunctionLevelLinking="true"
 				RuntimeTypeInfo="false"
+				UsePrecompiledHeader="2"
+				PrecompiledHeaderFile="$(IntDir)\StdAfx.pch"
 				WarningLevel="4"
 				WarnAsError="false"
 				SuppressStartupBanner="true"
@@ -243,7 +250,7 @@
 				Name="VCLinkerTool"
 				AdditionalOptions="/nxcompat /dynamicbase"
 				OutputFile="$(OutDir)\LUTLoader.exe"
-				Version="1.0"
+				Version="0.7"
 				LinkIncremental="1"
 				SuppressStartupBanner="true"
 				DelayLoadDLLs="msimg32.dll"
@@ -313,6 +320,9 @@
 				StringPooling="true"
 				RuntimeLibrary="0"
 				EnableFunctionLevelLinking="true"
+				RuntimeTypeInfo="false"
+				UsePrecompiledHeader="2"
+				PrecompiledHeaderFile="$(IntDir)\StdAfx.pch"
 				WarningLevel="4"
 				WarnAsError="false"
 				SuppressStartupBanner="true"
@@ -331,7 +341,7 @@
 				Name="VCLinkerTool"
 				AdditionalOptions="/nxcompat /dynamicbase"
 				OutputFile="$(OutDir)\LUTLoader.exe"
-				Version="1.0"
+				Version="0.7"
 				LinkIncremental="1"
 				SuppressStartupBanner="true"
 				DelayLoadDLLs="msimg32.dll"
@@ -422,6 +432,38 @@
 			<File
 				RelativePath=".\stdafx.cpp"
 				>
+				<FileConfiguration
+					Name="Debug|Win32"
+					>
+					<Tool
+						Name="VCCLCompilerTool"
+						UsePrecompiledHeader="1"
+					/>
+				</FileConfiguration>
+				<FileConfiguration
+					Name="Debug|x64"
+					>
+					<Tool
+						Name="VCCLCompilerTool"
+						UsePrecompiledHeader="1"
+					/>
+				</FileConfiguration>
+				<FileConfiguration
+					Name="Release|Win32"
+					>
+					<Tool
+						Name="VCCLCompilerTool"
+						UsePrecompiledHeader="1"
+					/>
+				</FileConfiguration>
+				<FileConfiguration
+					Name="Release|x64"
+					>
+					<Tool
+						Name="VCCLCompilerTool"
+						UsePrecompiledHeader="1"
+					/>
+				</FileConfiguration>
 			</File>
 			<File
 				RelativePath=".\TreeViewItem.cpp"

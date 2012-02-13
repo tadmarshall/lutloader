@@ -2,8 +2,8 @@
 //
 
 #include "buildnumber.h"
-#define MAJOR_VERSION        1
-#define MINOR_VERSION        0
+#define MAJOR_VERSION        0
+#define MINOR_VERSION        7
 
 //#define BUILD_NUMBER         100			// Uncomment to force specific build number
 #ifndef BUILD_NUMBER
