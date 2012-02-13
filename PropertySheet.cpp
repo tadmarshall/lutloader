@@ -11,6 +11,7 @@
 #include "Resize.h"
 #include "resource.h"
 #include "Utility.h"
+#include "VersionMacros.h"
 #include <strsafe.h>
 //#include <banned.h>
 
@@ -288,7 +289,7 @@ INT_PTR CALLBACK SummaryPageProc(HWND hWnd, UINT uMessage, WPARAM wParam, LPARAM
 			anchorPreset.anchorTop = true;
 			anchorPreset.anchorRight = true;
 			anchorPreset.anchorBottom = true;
-			Resize::AddAchorPreset(anchorPreset);
+			Resize::AddAnchorPreset(anchorPreset);
 
 			// These two hidden windows are used to track resizing prior to
 			// other pages being created.  We set IDC_RESIZED to grow in all
@@ -298,7 +299,7 @@ INT_PTR CALLBACK SummaryPageProc(HWND hWnd, UINT uMessage, WPARAM wParam, LPARAM
 			//
 			hwnd_IDC_RESIZED = GetDlgItem(hWnd, IDC_RESIZED);
 			anchorPreset.hwnd = hwnd_IDC_RESIZED;
-			Resize::AddAchorPreset(anchorPreset);
+			Resize::AddAnchorPreset(anchorPreset);
 
 			anchorPreset.anchorLeft = false;
 			anchorPreset.anchorTop = false;
@@ -306,13 +307,13 @@ INT_PTR CALLBACK SummaryPageProc(HWND hWnd, UINT uMessage, WPARAM wParam, LPARAM
 			anchorPreset.anchorBottom = false;
 			hwnd_IDC_ORIGINAL_SIZE = GetDlgItem(hWnd, IDC_ORIGINAL_SIZE);
 			anchorPreset.hwnd = hwnd_IDC_ORIGINAL_SIZE;
-			Resize::AddAchorPreset(anchorPreset);
+			Resize::AddAnchorPreset(anchorPreset);
 
 #if 0
 			anchorPreset.anchorLeft = true;
 			anchorPreset.anchorBottom = true;
 			anchorPreset.hwnd = GetDlgItem(hWnd, IDC_USE_WINDOWS_DISPLAY_CALIBRATION);
-			Resize::AddAchorPreset(anchorPreset);
+			Resize::AddAnchorPreset(anchorPreset);
 #endif
 
 			// Build the contents of the Summary page
@@ -360,7 +361,7 @@ INT_PTR CALLBACK SummaryPageProc(HWND hWnd, UINT uMessage, WPARAM wParam, LPARAM
 				anchorPreset.anchorTop = true;
 				anchorPreset.anchorRight = true;
 				anchorPreset.anchorBottom = true;
-				Resize::AddAchorPreset(anchorPreset);
+				Resize::AddAnchorPreset(anchorPreset);
 
 				// Tell the LUT viewer to display the LUT for the first monitor
 				//
@@ -575,7 +576,7 @@ int CALLBACK PropSheetCallback(HWND hWnd, UINT uMsg, LPARAM lParam) {
 				anchorPreset.anchorTop = true;
 				anchorPreset.anchorRight = true;
 				anchorPreset.anchorBottom = true;
-				Resize::AddAchorPreset(anchorPreset);
+				Resize::AddAnchorPreset(anchorPreset);
 
 				// Change the font on the tab control
 				//
@@ -673,15 +674,15 @@ int ShowPropertySheet(int nShowCmd) {
 #if HARDCODE_PROGRAM_CAPTION
   #ifdef _WIN64
     #ifdef _DEBUG
-		psh.pszCaption = L"LUT Loader 64-bit Debug";
+		psh.pszCaption = L"LUT Loader 64-bit Debug v" PROGRAM_VERSION(MAJOR_VERSION, MINOR_VERSION, BUILD_NUMBER, REVISION_NUMBER, BUILD_TAG);
     #else
-		psh.pszCaption = L"LUT Loader 64-bit Release";
+		psh.pszCaption = L"LUT Loader 64-bit Release v" PROGRAM_VERSION(MAJOR_VERSION, MINOR_VERSION, BUILD_NUMBER, REVISION_NUMBER, BUILD_TAG);
     #endif
   #else
     #ifdef _DEBUG
-		psh.pszCaption = L"LUT Loader 32-bit Debug";
+		psh.pszCaption = L"LUT Loader 32-bit Debug v" PROGRAM_VERSION(MAJOR_VERSION, MINOR_VERSION, BUILD_NUMBER, REVISION_NUMBER, BUILD_TAG);
     #else
-		psh.pszCaption = L"LUT Loader 32-bit Release";
+		psh.pszCaption = L"LUT Loader 32-bit Release v" PROGRAM_VERSION(MAJOR_VERSION, MINOR_VERSION, BUILD_NUMBER, REVISION_NUMBER, BUILD_TAG);
     #endif
   #endif
 #else

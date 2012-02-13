@@ -32,7 +32,7 @@ public:
 
 	static bool GetNeedRebuild(void);
 	static void SetNeedRebuild(bool isRebuildNeeded);
-	static void AddAchorPreset(const ANCHOR_PRESET & anchorPreset);
+	static void AddAnchorPreset(const ANCHOR_PRESET & anchorPreset);
 	static void SetupForResizing(HWND parentBase);
 	static void MainWindowHasResized(const WINDOWPOS & windowPos);
 	static void ClearResizeList(bool freeAllMemory);

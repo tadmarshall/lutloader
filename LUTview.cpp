@@ -140,26 +140,32 @@ LUTview::~LUTview() {
 
 // Vector of LUTviews
 //
-static vector <LUTview *> lutViewList;
+static vector <LUTview *> * lutViewList = 0;
 
 // Add a LUTview to the end of the list
 //
 LUTview * LUTview::Add(LUTview * newView) {
-	lutViewList.push_back(newView);
+	if ( 0 == lutViewList ) {
+		lutViewList = new vector <LUTview *>;
+	}
+	lutViewList->push_back(newView);
 	return newView;
 }
 
 // Clear the list of viewers
 //
 void LUTview::ClearList(bool freeAllMemory) {
-	size_t count = lutViewList.size();
-	for (size_t i = 0; i < count; ++i) {
-		delete lutViewList[i];
-	}
-	lutViewList.clear();
-	if ( freeAllMemory && (lutViewList.capacity() > 0) ) {
-		vector <LUTview *> dummy;
-		lutViewList.swap(dummy);
+	if (lutViewList) {
+		size_t count = lutViewList->size();
+		for (size_t i = 0; i < count; ++i) {
+			delete (*lutViewList)[i];
+		}
+		if (freeAllMemory) {
+			delete lutViewList;
+			lutViewList = 0;
+		} else {
+			lutViewList->clear();
+		}
 	}
 }
 

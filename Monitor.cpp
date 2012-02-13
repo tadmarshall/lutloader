@@ -266,26 +266,32 @@ bool Monitor::SetActiveProfileIsUserProfile(bool userActive) {
 
 // Vector of monitors
 //
-static vector <Monitor *> monitorList;
+static vector <Monitor *> * monitorList = 0;
 
 // Add a monitor to the end of the list
 //
 Monitor * Monitor::Add(Monitor * monitor) {
-	monitorList.push_back(monitor);
+	if ( 0 == monitorList ) {
+		monitorList = new vector <Monitor *>;
+	}
+	monitorList->push_back(monitor);
 	return monitor;
 }
 
 // Clear the list of monitors
 //
 void Monitor::ClearList(bool freeAllMemory) {
-	size_t count = monitorList.size();
-	for (size_t i = 0; i < count; ++i) {
-		delete monitorList[i];
-	}
-	monitorList.clear();
-	if ( freeAllMemory && (monitorList.capacity() > 0) ) {
-		vector <Monitor *> dummy;
-		monitorList.swap(dummy);
+	if (monitorList) {
+		size_t count = monitorList->size();
+		for (size_t i = 0; i < count; ++i) {
+			delete (*monitorList)[i];
+		}
+		if (freeAllMemory) {
+			delete monitorList;
+			monitorList = 0;
+		} else {
+			monitorList->clear();
+		}
 	}
 }
 
@@ -344,13 +350,17 @@ LUT * Monitor::GetLutPointer(void) const {
 }
 
 size_t Monitor::GetListSize(void) {
-	return monitorList.size();
+	if (monitorList) {
+		return monitorList->size();
+	} else {
+		return 0;
+	}
 }
 
 // Fetch a reference to a monitor by index number
 //
 Monitor * Monitor::Get(size_t index) {
-	return monitorList[index];
+	return (*monitorList)[index];
 }
 
 // Return a summary string

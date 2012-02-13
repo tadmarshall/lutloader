@@ -17,11 +17,11 @@ Resize::Resize(HWND parent) :
 
 // Vector of Resize objects
 //
-static vector <Resize> resizeList;
+static vector <Resize> * resizeList = 0;
 
 // Vector of anchor presets
 //
-static vector <ANCHOR_PRESET> achorPresetList;
+static vector <ANCHOR_PRESET> * anchorPresetList = 0;
 
 // Top window in our tree (the PropertySheet's main window)
 //
@@ -30,10 +30,6 @@ static HWND topWindow = 0;
 // The size of the top window the last time its size changed
 //
 static SIZE previousTopWindowSize = {0};
-
-// We can't start until the Summary page's WM_INITDIALOG code has restored our WindowPlacement
-//
-//static bool readyToResize = false;
 
 // We need to rebuild the list of child windows on the next resize
 //
@@ -65,8 +61,11 @@ void Resize::SetNeedRebuild(bool isRebuildNeeded) {
 
 // Add an anchor preset
 //
-void Resize::AddAchorPreset(const ANCHOR_PRESET & anchorPreset) {
-	achorPresetList.push_back(anchorPreset);
+void Resize::AddAnchorPreset(const ANCHOR_PRESET & anchorPreset) {
+	if ( 0 == anchorPresetList ) {
+		anchorPresetList = new vector <ANCHOR_PRESET>;
+	}
+	anchorPresetList->push_back(anchorPreset);
 }
 
 // Callback procedure for EnumChildWindows
@@ -75,8 +74,8 @@ BOOL CALLBACK EnumChildCallback(HWND hwnd, LPARAM lParam) {
 	UNREFERENCED_PARAMETER(lParam);
 
 	HWND parent = GetParent(hwnd);
-	vector<Resize>::iterator it = resizeList.begin();
-	vector<Resize>::iterator itEnd = resizeList.end();
+	vector<Resize>::iterator it = resizeList->begin();
+	vector<Resize>::iterator itEnd = resizeList->end();
 	for (; it != itEnd; ++it) {
 		if (it->GetParentWindow() == parent) {
 			break;
@@ -85,9 +84,9 @@ BOOL CALLBACK EnumChildCallback(HWND hwnd, LPARAM lParam) {
 
 	if (it == itEnd) {
 		Resize * newList = new Resize(parent);
-		resizeList.push_back(*newList);
+		resizeList->push_back(*newList);
 		delete newList;
-		it = resizeList.end() - 1;
+		it = resizeList->end() - 1;
 	}
 	WINDOWINFO wiParent;
 	SecureZeroMemory(&wiParent, sizeof(wiParent));
@@ -106,15 +105,18 @@ BOOL CALLBACK EnumChildCallback(HWND hwnd, LPARAM lParam) {
 
 	// If the window is in the preset list, use the entry
 	//
-	size_t count = achorPresetList.size();
-	size_t i;
-	for (i = 0; i < count; ++i) {
-		if (achorPresetList[i].hwnd == hwnd) {
-			c.anchorLeft = achorPresetList[i].anchorLeft;
-			c.anchorTop = achorPresetList[i].anchorTop;
-			c.anchorRight = achorPresetList[i].anchorRight;
-			c.anchorBottom = achorPresetList[i].anchorBottom;
-			break;
+	size_t count = 0;
+	size_t i = 0;
+	if (anchorPresetList) {
+		count = anchorPresetList->size();
+		for (; i < count; ++i) {
+			if ((*anchorPresetList)[i].hwnd == hwnd) {
+				c.anchorLeft = (*anchorPresetList)[i].anchorLeft;
+				c.anchorTop = (*anchorPresetList)[i].anchorTop;
+				c.anchorRight = (*anchorPresetList)[i].anchorRight;
+				c.anchorBottom = (*anchorPresetList)[i].anchorBottom;
+				break;
+			}
 		}
 	}
 
@@ -133,7 +135,11 @@ BOOL CALLBACK EnumChildCallback(HWND hwnd, LPARAM lParam) {
 // Rebuild the window list
 //
 void Resize::SetupForResizing(HWND parentBase) {
-	resizeList.clear();
+	if (resizeList) {
+		resizeList->clear();
+	} else {
+		resizeList = new vector <Resize>;
+	}
 	topWindow = parentBase;
 	RECT rect;
 	GetWindowRect(topWindow, &rect);
@@ -159,58 +165,24 @@ void Resize::MainWindowHasResized(const WINDOWPOS & windowPos) {
 	if (!topWindow) {
 		return;
 	}
-	vector<Resize>::iterator it = resizeList.begin();
+	if (resizeList) {
+		vector<Resize>::iterator it = resizeList->begin();
 
-	// Handle windows which are direct children of the top window
-	//
-	Resize * rs = &(*it);
-	size_t count = rs->childList.size();
-	SetLastError(0);
-	HDWP hdwp = BeginDeferWindowPos(static_cast<int>(count));
-	DWORD err = GetLastError();
-	vector<RESIZECHILD>::iterator clEnd = it->childList.end();
-	if (hdwp) {
-		for (vector<RESIZECHILD>::iterator cl = it->childList.begin(); hdwp && !err && (cl != clEnd); ++cl) {
-			RESIZECHILD * rc = &(*cl);
-			nr.left = rc->rect.left + ( (rc->anchorRight && !rc->anchorLeft) ? parentSizeDelta.cx : 0 );
-			nr.top  = rc->rect.top  + ( (rc->anchorBottom && !rc->anchorTop) ? parentSizeDelta.cy : 0 );
-			nr.right  = rc->rect.right  + (rc->anchorRight  ? parentSizeDelta.cx : 0 );
-			nr.bottom = rc->rect.bottom + (rc->anchorBottom ? parentSizeDelta.cy : 0 );
-			if ( !EqualRect(&nr, &rc->rect) ) {
-				hdwp = DeferWindowPos( hdwp, rc->hwnd, 0,
-						rc->rect.left + ( (rc->anchorRight && !rc->anchorLeft) ? parentSizeDelta.cx : 0 ),
-						rc->rect.top  + ( (rc->anchorBottom && !rc->anchorTop) ? parentSizeDelta.cy : 0 ),
-						rc->rect.right - rc->rect.left + ( (rc->anchorLeft && rc->anchorRight) ? parentSizeDelta.cx : 0 ),
-						rc->rect.bottom - rc->rect.top + ( (rc->anchorTop && rc->anchorBottom) ? parentSizeDelta.cy : 0 ),
-						SWP_NOACTIVATE | SWP_NOCOPYBITS | SWP_NOOWNERZORDER | SWP_NOZORDER );
-				err = GetLastError();
-				if (!err) {
-					rc->rect = nr;
-				}
-			}
-		}
-	}
-	if (hdwp) {
-		EndDeferWindowPos(hdwp);
-	}
-
-	// Handle windows which are children of children of the top window
-	//
-	vector<Resize>::iterator itEnd = resizeList.end();
-	for (++it; it != itEnd; ++it) {
-		rs = &(*it);
-		count = rs->childList.size();
+		// Handle windows which are direct children of the top window
+		//
+		Resize * rs = &(*it);
+		size_t count = rs->childList.size();
 		SetLastError(0);
-		hdwp = BeginDeferWindowPos(static_cast<int>(count));
-		err = GetLastError();
+		HDWP hdwp = BeginDeferWindowPos(static_cast<int>(count));
+		DWORD err = GetLastError();
+		vector<RESIZECHILD>::iterator clEnd = it->childList.end();
 		if (hdwp) {
-			clEnd = it->childList.end();
 			for (vector<RESIZECHILD>::iterator cl = it->childList.begin(); hdwp && !err && (cl != clEnd); ++cl) {
 				RESIZECHILD * rc = &(*cl);
 				nr.left = rc->rect.left + ( (rc->anchorRight && !rc->anchorLeft) ? parentSizeDelta.cx : 0 );
 				nr.top  = rc->rect.top  + ( (rc->anchorBottom && !rc->anchorTop) ? parentSizeDelta.cy : 0 );
-				nr.right  = rc->rect.right  + ( rc->anchorRight  ? parentSizeDelta.cx : 0 );
-				nr.bottom = rc->rect.bottom + ( rc->anchorBottom ? parentSizeDelta.cy : 0 );
+				nr.right  = rc->rect.right  + (rc->anchorRight  ? parentSizeDelta.cx : 0 );
+				nr.bottom = rc->rect.bottom + (rc->anchorBottom ? parentSizeDelta.cy : 0 );
 				if ( !EqualRect(&nr, &rc->rect) ) {
 					hdwp = DeferWindowPos( hdwp, rc->hwnd, 0,
 							rc->rect.left + ( (rc->anchorRight && !rc->anchorLeft) ? parentSizeDelta.cx : 0 ),
@@ -228,25 +200,67 @@ void Resize::MainWindowHasResized(const WINDOWPOS & windowPos) {
 		if (hdwp) {
 			EndDeferWindowPos(hdwp);
 		}
+
+		// Handle windows which are children of children of the top window
+		//
+		vector<Resize>::iterator itEnd = resizeList->end();
+		for (++it; it != itEnd; ++it) {
+			rs = &(*it);
+			count = rs->childList.size();
+			SetLastError(0);
+			hdwp = BeginDeferWindowPos(static_cast<int>(count));
+			err = GetLastError();
+			if (hdwp) {
+				clEnd = it->childList.end();
+				for (vector<RESIZECHILD>::iterator cl = it->childList.begin(); hdwp && !err && (cl != clEnd); ++cl) {
+					RESIZECHILD * rc = &(*cl);
+					nr.left = rc->rect.left + ( (rc->anchorRight && !rc->anchorLeft) ? parentSizeDelta.cx : 0 );
+					nr.top  = rc->rect.top  + ( (rc->anchorBottom && !rc->anchorTop) ? parentSizeDelta.cy : 0 );
+					nr.right  = rc->rect.right  + ( rc->anchorRight  ? parentSizeDelta.cx : 0 );
+					nr.bottom = rc->rect.bottom + ( rc->anchorBottom ? parentSizeDelta.cy : 0 );
+					if ( !EqualRect(&nr, &rc->rect) ) {
+						hdwp = DeferWindowPos( hdwp, rc->hwnd, 0,
+								rc->rect.left + ( (rc->anchorRight && !rc->anchorLeft) ? parentSizeDelta.cx : 0 ),
+								rc->rect.top  + ( (rc->anchorBottom && !rc->anchorTop) ? parentSizeDelta.cy : 0 ),
+								rc->rect.right - rc->rect.left + ( (rc->anchorLeft && rc->anchorRight) ? parentSizeDelta.cx : 0 ),
+								rc->rect.bottom - rc->rect.top + ( (rc->anchorTop && rc->anchorBottom) ? parentSizeDelta.cy : 0 ),
+								SWP_NOACTIVATE | SWP_NOCOPYBITS | SWP_NOOWNERZORDER | SWP_NOZORDER );
+						err = GetLastError();
+						if (!err) {
+							rc->rect = nr;
+						}
+					}
+				}
+			}
+			if (hdwp) {
+				EndDeferWindowPos(hdwp);
+			}
+		}
 	}
 }
 
 // Clear the list of Resize objects
 //
 void Resize::ClearResizeList(bool freeAllMemory) {
-	resizeList.clear();
-	if ( freeAllMemory && (resizeList.capacity() > 0) ) {
-		vector <Resize> dummy;
-		resizeList.swap(dummy);
+	if (resizeList) {
+		if (freeAllMemory) {
+			delete resizeList;
+			resizeList = 0;
+		} else {
+			resizeList->clear();
+		}
 	}
 }
 
 // Clear the list of ANCHOR_PRESET objects
 //
 void Resize::ClearAnchorPresetList(bool freeAllMemory) {
-	achorPresetList.clear();
-	if ( freeAllMemory && (achorPresetList.capacity() > 0) ) {
-		vector <ANCHOR_PRESET> dummy;
-		achorPresetList.swap(dummy);
+	if (anchorPresetList) {
+		if (freeAllMemory) {
+			delete anchorPresetList;
+			anchorPresetList = 0;
+		} else {
+			anchorPresetList->clear();
+		}
 	}
 }

@@ -773,14 +773,14 @@ INT_PTR CALLBACK MonitorPage::MonitorPageProc(HWND hWnd, UINT uMessage, WPARAM w
 			anchorPreset.anchorTop = true;
 			anchorPreset.anchorRight = true;
 			anchorPreset.anchorBottom = true;
-			Resize::AddAchorPreset(anchorPreset);
+			Resize::AddAnchorPreset(anchorPreset);
 
 			anchorPreset.hwnd = thisPage->hwndEdit;
-			Resize::AddAchorPreset(anchorPreset);
+			Resize::AddAnchorPreset(anchorPreset);
 
 			anchorPreset.hwnd = thisPage->hwndTreeView;
 			anchorPreset.anchorRight = false;
-			Resize::AddAchorPreset(anchorPreset);
+			Resize::AddAnchorPreset(anchorPreset);
 
 			// Get the page's WINDOWINFO
 			//

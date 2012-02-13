@@ -153,7 +153,7 @@ int WINAPI WinMain(
 	g_hInst = hInstance;
 
 #ifdef DEBUG_MEMORY_LEAKS
-	//_crtBreakAlloc = 221;		// To debug memory leaks, set this to allocation number ("{nnn}")
+	//_crtBreakAlloc = 223;		// To debug memory leaks, set this to allocation number ("{nnn}")
 #endif
 
 	// Turn on DEP, if available
@@ -177,6 +177,46 @@ int WINAPI WinMain(
 			p_SetDllDirectoryW(L"");
 		}
 	}
+
+	// See http://blog.paulbetts.org/index.php/2010/07/20/the-case-of-the-disappearing-onload-exception-user-mode-callback-exceptions-in-x64/
+	//
+	// This code should allow exceptions to *NOT* be swallowed ...
+	//
+
+#if 0
+
+// Another way that you can enable/disable exception swallowing is via a new public API in
+// Kernel32.dll – since this won’t be available in the SDK headers until Win7 SP1, you’ll
+// have to dynamically invoke the API call via LoadLibrary and GetProcAddress.
+// Here’s the definitions of these functions: 
+
+//
+// If this flag is set, the exception will be *swallowed* (i.e. the Server ’03
+// behavior)
+//
+
+#define PROCESS_CALLBACK_FILTER_ENABLED     0×1
+
+BOOL
+WINAPI
+SetProcessUserModeExceptionPolicy(
+    __in DWORD dwFlags
+    );
+
+BOOL
+WINAPI
+GetProcessUserModeExceptionPolicy(
+    __out LPDWORD lpFlags
+    );
+
+// So, the best future-proof way to call this function is: 
+
+DWORD dwFlags;
+if (GetProcessUserModeExceptionPolicy(&dwFlags)) {
+    SetProcessUserModeExceptionPolicy(dwFlags & ~PROCESS_CALLBACK_FILTER_ENABLED); // turn off bit 1
+}
+
+#endif
 
 	// Find the directory for profiles (usually "C:\Windows\system32\spool\drivers\color")
 	//

@@ -69,26 +69,32 @@ MonitorSummaryItem::MonitorSummaryItem(Monitor * hostMonitor) :
 
 // Vector of MonitorSummaryItems
 //
-static vector <MonitorSummaryItem *> monitorSummaryItemList;
+static vector <MonitorSummaryItem *> * monitorSummaryItemList = 0;
 
 // Add a MonitorSummaryItem to the end of the list
 //
 MonitorSummaryItem * MonitorSummaryItem::Add(MonitorSummaryItem * newItem) {
-	monitorSummaryItemList.push_back(newItem);
+	if ( 0 == monitorSummaryItemList ) {
+		monitorSummaryItemList = new vector <MonitorSummaryItem *>;
+	}
+	monitorSummaryItemList->push_back(newItem);
 	return newItem;
 }
 
 // Clear the list of MonitorSummaryItems
 //
 void MonitorSummaryItem::ClearList(bool freeAllMemory) {
-	size_t count = monitorSummaryItemList.size();
-	for (size_t i = 0; i < count; ++i) {
-		delete monitorSummaryItemList[i];
-	}
-	monitorSummaryItemList.clear();
-	if ( freeAllMemory && (monitorSummaryItemList.capacity() > 0) ) {
-		vector <MonitorSummaryItem *> dummy;
-		monitorSummaryItemList.swap(dummy);
+	if (monitorSummaryItemList) {
+		size_t count = monitorSummaryItemList->size();
+		for (size_t i = 0; i < count; ++i) {
+			delete (*monitorSummaryItemList)[i];
+		}
+		if (freeAllMemory) {
+			delete monitorSummaryItemList;
+			monitorSummaryItemList = 0;
+		} else {
+			monitorSummaryItemList->clear();
+		}
 	}
 }
 
@@ -370,7 +376,7 @@ HWND MonitorSummaryItem::CreateMonitorSummaryItemWindow(
 	anchorPreset.anchorTop = true;
 	anchorPreset.anchorRight = true;
 	anchorPreset.anchorBottom = false;
-	Resize::AddAchorPreset(anchorPreset);
+	Resize::AddAnchorPreset(anchorPreset);
 
 	// If there are no monitors, our role in life is to say so, so we don't need buttons
 	//
@@ -434,10 +440,10 @@ HWND MonitorSummaryItem::CreateMonitorSummaryItemWindow(
 
 		anchorPreset.hwnd = hwndLoadLutButton;
 		anchorPreset.anchorLeft = false;
-		Resize::AddAchorPreset(anchorPreset);
+		Resize::AddAnchorPreset(anchorPreset);
 
 		anchorPreset.hwnd = hwndRescanButton;
-		Resize::AddAchorPreset(anchorPreset);
+		Resize::AddAnchorPreset(anchorPreset);
 	}
 	return hwnd;
 }

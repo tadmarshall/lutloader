@@ -422,34 +422,40 @@ Profile::~Profile() {
 
 // Vector of profiles
 //
-static vector <Profile *> profileList;
+static vector <Profile *> * mainProfileList = 0;
 
 // Add a profile to the list if it isn't already on it -- if it is already on the list,
 // delete the profile we were passed, and return a pointer to the one we found on the list.
 //
 Profile * Profile::Add(Profile * profile) {
-	size_t index = profileList.size();
+	if ( 0 == mainProfileList ) {
+		mainProfileList = new vector <Profile *>;
+	}
+	size_t index = mainProfileList->size();
 	for (size_t i = 0; i < index; ++i) {
-		if ( profile->ProfileName == profileList[i]->ProfileName ) {
+		if ( profile->ProfileName == (*mainProfileList)[i]->ProfileName ) {
 			delete profile;
-			return profileList[i];
+			return (*mainProfileList)[i];
 		}
 	}
-	profileList.push_back(profile);
+	mainProfileList->push_back(profile);
 	return profile;
 }
 
 // Clear the list of profiles
 //
 void Profile::ClearList(bool freeAllMemory) {
-	size_t count = profileList.size();
-	for (size_t i = 0; i < count; ++i) {
-		delete profileList[i];
-	}
-	profileList.clear();
-	if ( freeAllMemory && (profileList.capacity() > 0) ) {
-		vector <Profile *> dummy;
-		profileList.swap(dummy);
+	if (mainProfileList) {
+		size_t count = mainProfileList->size();
+		for (size_t i = 0; i < count; ++i) {
+			delete (*mainProfileList)[i];
+		}
+		if (freeAllMemory) {
+			delete mainProfileList;
+			mainProfileList = 0;
+		} else {
+			mainProfileList->clear();
+		}
 	}
 }
 

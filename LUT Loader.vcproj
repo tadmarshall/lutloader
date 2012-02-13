@@ -28,6 +28,7 @@
 				Name="VCPreBuildEventTool"
 				Description="Increment the build number"
 				CommandLine="buildnumber"
+				ExcludedFromBuild="false"
 			/>
 			<Tool
 				Name="VCCustomBuildTool"
@@ -44,13 +45,13 @@
 			<Tool
 				Name="VCCLCompilerTool"
 				Optimization="0"
+				GeneratePreprocessedFile="0"
 				StringPooling="true"
 				MinimalRebuild="true"
 				BasicRuntimeChecks="3"
 				RuntimeLibrary="1"
 				EnableFunctionLevelLinking="true"
 				RuntimeTypeInfo="false"
-				UsePrecompiledHeader="1"
 				WarningLevel="4"
 				WarnAsError="false"
 				SuppressStartupBanner="true"
@@ -70,7 +71,7 @@
 				Name="VCLinkerTool"
 				AdditionalOptions="/nxcompat /dynamicbase"
 				OutputFile="$(OutDir)\LUTLoader.exe"
-				Version="1.0.0.0"
+				Version="1.0"
 				LinkIncremental="1"
 				SuppressStartupBanner="true"
 				AdditionalManifestDependencies=""
@@ -156,7 +157,7 @@
 				Name="VCLinkerTool"
 				AdditionalOptions="/nxcompat /dynamicbase"
 				OutputFile="$(OutDir)\LUTLoader.exe"
-				Version="1.0.0.0"
+				Version="1.0"
 				LinkIncremental="1"
 				SuppressStartupBanner="true"
 				AdditionalManifestDependencies=""
@@ -224,7 +225,6 @@
 				RuntimeLibrary="0"
 				EnableFunctionLevelLinking="true"
 				RuntimeTypeInfo="false"
-				UsePrecompiledHeader="0"
 				WarningLevel="4"
 				WarnAsError="false"
 				SuppressStartupBanner="true"
@@ -243,7 +243,7 @@
 				Name="VCLinkerTool"
 				AdditionalOptions="/nxcompat /dynamicbase"
 				OutputFile="$(OutDir)\LUTLoader.exe"
-				Version="1.0.0.0"
+				Version="1.0"
 				LinkIncremental="1"
 				SuppressStartupBanner="true"
 				DelayLoadDLLs="msimg32.dll"
@@ -313,7 +313,6 @@
 				StringPooling="true"
 				RuntimeLibrary="0"
 				EnableFunctionLevelLinking="true"
-				UsePrecompiledHeader="0"
 				WarningLevel="4"
 				WarnAsError="false"
 				SuppressStartupBanner="true"
@@ -332,7 +331,7 @@
 				Name="VCLinkerTool"
 				AdditionalOptions="/nxcompat /dynamicbase"
 				OutputFile="$(OutDir)\LUTLoader.exe"
-				Version="1.0.0.0"
+				Version="1.0"
 				LinkIncremental="1"
 				SuppressStartupBanner="true"
 				DelayLoadDLLs="msimg32.dll"
@@ -443,6 +442,10 @@
 				>
 			</File>
 			<File
+				RelativePath=".\buildnumber.h"
+				>
+			</File>
+			<File
 				RelativePath=".\LUT.h"
 				>
 			</File>
@@ -488,6 +491,10 @@
 			</File>
 			<File
 				RelativePath=".\Utility.h"
+				>
+			</File>
+			<File
+				RelativePath=".\VersionMacros.h"
 				>
 			</File>
 			<File
